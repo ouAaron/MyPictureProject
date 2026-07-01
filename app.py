@@ -4,9 +4,9 @@ from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
 import io
 from PIL import Image, ImageStat
 
-app = FastAPI(title="PhotoFramer Academic Real-time App")
+app = FastAPI(title="PhotoFramer Academic Camera App v3")
 
-# 🎬 前端網頁：專業相機介面、嚴謹提示、拍完照「自動觸發儲存」
+# 🎬 前端網頁：實現 iPhone 級固定網格變焦與原生相簿儲存機制
 @app.get("/", response_class=HTMLResponse)
 async def get_frontend():
     html_content = """
@@ -14,31 +14,33 @@ async def get_frontend():
     <html lang="zh-TW">
     <head>
         <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
         <title>PhotoFramer AI 構圖美學引導系統</title>
         <style>
-            body { margin: 0; background-color: #121212; font-family: -apple-system, sans-serif; overflow: hidden; display: flex; flex-direction: column; align-items: center; height: 100vh; color: white; }
+            body { margin: 0; background-color: #000; font-family: -apple-system, sans-serif; overflow: hidden; display: flex; flex-direction: column; align-items: center; height: 100vh; color: white; -webkit-user-select: none; user-select: none; }
+            
+            /* 1. 外層容器固定大小 */
             #camera-container { position: relative; width: 100%; max-width: 450px; height: 65vh; background: #000; overflow: hidden; border-radius: 16px; margin-top: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.6); }
-            video { width: 100%; height: 100%; object-fit: cover; }
             
-            /* 專業導演引導字幕框（無表情符號，強化學術感） */
-            #guidance-box { position: absolute; top: 15px; left: 5%; width: 90%; background: rgba(0, 0, 0, 0.85); color: #00ffcc; padding: 12px 8px; border-radius: 10px; text-align: center; font-size: 15px; font-weight: bold; border: 1px solid #00ffcc; z-index: 10; box-shadow: 0 4px 12px rgba(0,0,0,0.5); letter-spacing: 0.5px; }
+            /* 🔥 【關鍵修正】：視訊畫面獨立控制，放大時只放大視訊，外層框與輔助線絕不動搖 */
+            video { width: 100%; height: 100%; object-fit: cover; transition: transform 0.2s ease; transform-origin: center center; }
             
-            /* 三分法輔助線 */
-            .grid-line { position: absolute; background: rgba(255, 255, 255, 0.35); }
+            /* 專業導演引導字幕框（絕對定位，不受 video 放大影響） */
+            #guidance-box { position: absolute; top: 15px; left: 5%; width: 90%; background: rgba(0, 0, 0, 0.85); color: #00ffcc; padding: 12px 8px; border-radius: 10px; text-align: center; font-size: 14px; font-weight: bold; border: 1px solid #00ffcc; z-index: 20; box-shadow: 0 4px 12px rgba(0,0,0,0.5); pointer-events: none; }
+            
+            /* 🔥 【關鍵修正】：三分法輔助線階層提高(z-index: 15)，永遠固定，寬度維持 1.5px 不變粗 */
+            .grid-line { position: absolute; background: rgba(255, 255, 255, 0.4); z-index: 15; pointer-events: none; }
             .v1 { left: 33.33%; top: 0; width: 1.5px; height: 100%; } .v2 { left: 66.66%; top: 0; width: 1.5px; height: 100%; }
             .h1 { top: 33.33%; left: 0; height: 1.5px; width: 100%; } .h2 { top: 66.66%; left: 0; height: 1.5px; width: 100%; }
             
             /* 控制面板與快門鍵 */
-            #control-panel { width: 100%; max-width: 450px; height: 25vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #121212; }
-            #snap-btn { width: 76px; height: 76px; border-radius: 50%; background: white; border: 6px solid #333; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.4); transition: all 0.2s; }
-            #snap-btn:active { transform: scale(0.9); background: #ff3b30; }
-            #status { color: #8e8e93; font-size: 13px; margin-bottom: 15px; text-align: center; }
-
-            /* 拍照成功提示彈窗 */
-            #result-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 100; flex-direction: column; align-items: center; justify-content: center; }
-            #result-img { max-width: 90%; max-height: 65vh; border-radius: 12px; border: 2px solid #fff; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-            #modal-close-btn { margin-top: 25px; padding: 12px 30px; background: #007aff; color: white; border: none; border-radius: 25px; font-size: 16px; font-weight: bold; cursor: pointer; }
+            #control-panel { width: 100%; max-width: 450px; height: 25vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #000; z-index: 30; }
+            #snap-btn { width: 74px; height: 74px; border-radius: 50%; background: white; border: 6px solid #333; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.4); transition: transform 0.1s; }
+            #snap-btn:active { transform: scale(0.92); }
+            #status { color: #8e8e93; font-size: 13px; margin-bottom: 12px; text-align: center; }
+            
+            /* 數位變焦倍率顯示數值（仿 iPhone 介面） */
+            #zoom-indicator { color: #ffd60a; font-size: 12px; font-weight: bold; margin-bottom: 8px; background: rgba(255,255,255,0.15); padding: 3px 8px; border-radius: 10px; display: none; }
         </style>
     </head>
     <body>
@@ -50,15 +52,9 @@ async def get_frontend():
         </div>
 
         <div id="control-panel">
-            <div id="status">大腦連線狀態：連線中</div>
+            <div id="zoom-indicator">1.0x</div>
+            <div id="status">大腦連線狀態：準備中</div>
             <button id="snap-btn"></button>
-        </div>
-
-        <div id="result-modal">
-            <h3 style="color: #00ffcc; margin-bottom: 5px;">構圖優化完成</h3>
-            <p style="color: #aaa; font-size: 13px; margin-bottom: 15px;">照片已自動儲存至您的裝置</p>
-            <img id="result-img" src="" alt="AI Optimized Image">
-            <button id="modal-close-btn" onclick="closeModal()">返回拍攝</button>
         </div>
 
         <canvas id="canvas" style="display:none;"></canvas>
@@ -69,22 +65,26 @@ async def get_frontend():
             const guidanceBox = document.getElementById('guidance-box');
             const statusText = document.getElementById('status');
             const snapBtn = document.getElementById('snap-btn');
-            const resultModal = document.getElementById('result-modal');
-            const resultImg = document.getElementById('result-img');
+            const zoomIndicator = document.getElementById('zoom-indicator');
             const ctx = canvas.getContext('2d');
 
             const API_URL = '/analyze-composition';
+            
+            // 當前畫面的數位放大倍率變數
+            let currentZoom = 1.0; 
 
+            // 1. 啟動相機鏡頭
             navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
             .then(stream => {
                 video.srcObject = stream;
                 statusText.innerText = "系統狀態：美學引導中";
-                setInterval(captureAndAnalyze, 1200);
+                setInterval(captureAndAnalyze, 1200); // 週期性傳送串流分析
             })
             .catch(err => {
-                guidanceBox.innerText = "錯誤：相機啟動失敗，請確認權限";
+                guidanceBox.innerText = "錯誤：相機啟動失敗，請檢查權限";
             });
 
+            // 2. 即時分析並控制「仿 iPhone 的畫面變焦」
             function captureAndAnalyze() {
                 if (video.readyState === video.HAVE_ENOUGH_DATA) {
                     canvas.width = 240;
@@ -101,7 +101,21 @@ async def get_frontend():
                             const raw = response.headers.get('x-instructions');
                             if (raw) {
                                 const decoded = decodeURIComponent(escape(raw));
-                                guidanceBox.innerText = decoded.split('|')[0].trim();
+                                const instructionString = decoded.split('|')[0].trim();
+                                guidanceBox.innerText = instructionString;
+                                
+                                // 🔥 【核心變更：配合大腦引導，動態調整 video 的 CSS 縮放，而框與線完全不動！】
+                                if (instructionString.includes("放大焦距") || instructionString.includes("前進")) {
+                                    if (currentZoom < 1.8) currentZoom += 0.1; // 逐步放大鏡頭背景
+                                    video.style.transform = `scale(${currentZoom})`;
+                                    zoomIndicator.innerText = `${currentZoom.toFixed(1)}x`;
+                                    zoomIndicator.style.display = "block";
+                                } else if (instructionString.includes("縮小焦距") || instructionString.includes("後退")) {
+                                    if (currentZoom > 1.0) currentZoom -= 0.1; // 逐步縮小鏡頭背景
+                                    video.style.transform = `scale(${currentZoom})`;
+                                    zoomIndicator.innerText = `${currentZoom.toFixed(1)}x`;
+                                    zoomIndicator.style.display = currentZoom > 1.0 ? "block" : "none";
+                                }
                             }
                         })
                         .catch(err => { console.error(err); });
@@ -109,14 +123,24 @@ async def get_frontend():
                 }
             }
 
-            // 📸 核心變更：拍照按鈕觸發後，自動下載（儲存）照片到相簿/裝置
+            // 3. 📸 核心變更：拍照按鈕觸發後，利用原生分享選單 100% 存入手機相簿
             snapBtn.addEventListener('click', () => {
                 if (video.readyState === video.HAVE_ENOUGH_DATA) {
                     statusText.innerText = "正在儲存並優化構圖中...";
                     
+                    // 拍照時要把當前數位變焦後的畫面真實擷取下來
                     canvas.width = video.videoWidth;
                     canvas.height = video.videoHeight;
+                    
+                    ctx.save();
+                    // 讓畫布跟著當前變焦比例做裁切繪製，確保拍出來的圖就是看見的變焦效果
+                    if (currentZoom > 1.0) {
+                        ctx.translate(canvas.width / 2, canvas.height / 2);
+                        ctx.scale(currentZoom, currentZoom);
+                        ctx.translate(-canvas.width / 2, -canvas.height / 2);
+                    }
                     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    ctx.restore();
                     
                     canvas.toBlob((blob) => {
                         if (!blob) return;
@@ -125,38 +149,46 @@ async def get_frontend():
 
                         fetch(API_URL, { method: 'POST', body: formData })
                         .then(response => response.blob())
-                        .then(imageBlob => {
-                            const blobUrl = URL.createObjectURL(imageBlob);
-                            resultImg.src = blobUrl;
-                            
-                            // 🔥 【學術標準：自動觸發裝置下載儲存行為】
-                            const downloadLink = document.createElement('a');
-                            downloadLink.href = blobUrl;
-                            downloadLink.download = `PhotoFramer_${Date.now()}.jpg`; // 自動產生不重複的檔名
-                            document.body.appendChild(downloadLink);
-                            downloadLink.click(); // 模擬點擊，強制手機自動下載保存照片
-                            document.body.removeChild(downloadLink);
-
-                            resultModal.style.display = 'flex';
+                        .then(async (imageBlob) => {
                             statusText.innerText = "系統狀態：美學引導中";
+                            
+                            // 將二進位 Blob 轉換為真實的實體檔案物件
+                            const file = new File([imageBlob], `PhotoFramer_${Date.now()}.jpg`, { type: 'image/jpeg' });
+                            
+                            // 🔥 【學術/應用核心】：呼叫手機原生 Web Share API 彈出選單
+                            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                                try {
+                                    await navigator.share({
+                                        files: [file],
+                                        title: '儲存優化相片',
+                                        text: 'PhotoFramer AI 構圖美學成果'
+                                    });
+                                    // 使用者此時在手機跳出的選單點擊「儲存影像」即可完美寫入手機相簿圖庫！
+                                } catch (error) {
+                                    console.log('使用者取消分享/儲存');
+                                }
+                            } else {
+                                // 備用方案：若不支援則觸發網頁下載
+                                const blobUrl = URL.createObjectURL(imageBlob);
+                                const downloadLink = document.createElement('a');
+                                downloadLink.href = blobUrl;
+                                downloadLink.download = `PhotoFramer_${Date.now()}.jpg`;
+                                downloadLink.click();
+                            }
                         })
                         .catch(err => {
                             alert("拍攝失敗: " + err);
                         });
-                    }, 'image/jpeg', 0.95); // 提高儲存相片的高畫質品質
+                    }, 'image/jpeg', 0.95);
                 }
             });
-
-            function closeModal() {
-                resultModal.style.display = 'none';
-            }
         </script>
     </body>
     </html>
     """
     return HTMLResponse(content=html_content, status_code=200)
 
-# 🧠 後端大腦：拉高美學判定標準（降低容忍度，讓判定更精準嚴格）
+# 🧠 後端大腦：維持嚴格判定指標
 @app.post("/analyze-composition")
 async def analyze_composition(file: UploadFile = File(...)):
     contents = await file.read()
@@ -168,31 +200,24 @@ async def analyze_composition(file: UploadFile = File(...)):
     
     w, h = orig_img.size
     
-    # 三分法區域精細切割
     left_third = orig_img.crop((0, 0, w // 3, h))
     right_third = orig_img.crop(((2 * w) // 3, 0, w, h))
     center_core = orig_img.crop((w // 4, h // 4, (3 * w) // 4, (3 * h) // 4))
     
-    # 統計特徵密度
     stat_left = ImageStat.Stat(left_third).rms[0]
     stat_right = ImageStat.Stat(right_third).rms[0]
     stat_center = ImageStat.Stat(center_core).rms[0]
     stat_global = ImageStat.Stat(orig_img).rms[0]
     
     instructions = []
-    
-    # 🔥 【嚴格調校點】：將判定的不平衡係數從原本的 1.15 倍，縮緊至更靈敏的 1.05 倍
-    # 這樣一來，只要畫面主體稍微偏離，系統就會果斷給予物理校正方向
     imbalance_threshold = 1.05 
     
-    # 左右軸向（水平位置）精確判定
     if stat_left > stat_right * imbalance_threshold:
-        instructions.append("[請向左平移移鏡頭] 修正當前主體偏右情形，使視覺特徵靠向黃金分割線線位置")
+        instructions.append("[請向左平移鏡頭] 修正當前主體偏右情形，使視覺特徵靠向黃金分割線位置")
     elif stat_right > stat_left * imbalance_threshold:
-        instructions.append("[請向右平移移鏡頭] 修正當前主體偏左情形，使視覺特徵靠向黃金分割線線位置")
+        instructions.append("[請向右平移鏡頭] 修正當前主體偏左情形，使視覺特徵靠向黃金分割線位置")
     else:
-        # 當左右平衡時，切換至深度（Z軸）或構圖完成判定
-        # 這裡我們保留這兩段框架，等一下直接來攻克放大縮小的極端問題！
+        # 當水平平衡時，由大腦判斷是否給予 Z 軸變焦提示
         if stat_center < stat_global * 0.9:
             instructions.append("[建議前進或放大焦距] 核心特徵占比過低，建議縮減環境冗餘邊緣")
         elif stat_center > stat_global * 1.15:
@@ -200,7 +225,6 @@ async def analyze_composition(file: UploadFile = File(...)):
         else:
             instructions.append("構圖指標已達美學標準，可直接按下拍攝鈕")
 
-    # 推薦裁剪幾何位置定位
     if stat_left > stat_right * imbalance_threshold:
         cx, cy = w // 3, h // 2
     elif stat_right > stat_left * imbalance_threshold:
