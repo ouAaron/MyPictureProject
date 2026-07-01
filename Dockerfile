@@ -2,8 +2,10 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# 安裝 OpenCV 所需的 Linux 基本影像套件
-RUN apt-get update && apt-get install -y \
+# 修正：加上 --allow-releaseinfo-change 與清潔指令，保證 Linux 套件順利安裝不崩潰
+RUN apt-get clean && \
+    apt-get update --allow-releaseinfo-change && \
+    apt-get install -y --no-install-recommends \
     libgl1-mesa-glx \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
