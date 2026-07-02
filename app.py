@@ -3,7 +3,7 @@ from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
 from composition_engine import AcademicCompositionEngine
 
-app = FastAPI(title="PhotoFramer Fullscreen App")
+app = FastAPI(title="PhotoFramer iPhone Style Camera")
 engine = AcademicCompositionEngine()
 
 @app.get("/", response_class=HTMLResponse)
@@ -14,42 +14,59 @@ async def get_frontend():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-        <title>PhotoFramer AI 美學引導系統</title>
+        <title>Camera</title>
         <style>
-            body { margin: 0; background-color: #000; font-family: -apple-system, sans-serif; overflow: hidden; display: flex; flex-direction: column; align-items: center; height: 100vh; color: white; -webkit-user-select: none; user-select: none; }
+            /* 🔥 iPhone 原生相機極致黑美學 */
+            body { margin: 0; background-color: #000; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; overflow: hidden; display: flex; flex-direction: column; align-items: center; height: 100vh; color: white; -webkit-user-select: none; user-select: none; }
             
-            /* 滿版相機容器，高度佔據 78% 手機螢幕長度 */
-            #camera-container { position: relative; width: 100%; max-width: 500px; height: 78vh; background: #000; overflow: hidden; }
+            /* 頂部工具列（仿 iPhone 狀態欄與閃光燈控制區） */
+            #top-bar { width: 100%; max-width: 500px; height: 6vh; background-color: #000; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; box-sizing: border-box; }
+            .top-icon { color: #fff; font-size: 18px; opacity: 0.9; }
             
-            /* 獨立鏡頭流縮放，三分線與外框不受影響 */
+            /* 滿版相機觀景窗：拉長至 72vh，保持 iPhone 經典拍照比例 */
+            #camera-container { position: relative; width: 100%; max-width: 500px; height: 72vh; background: #000; overflow: hidden; }
+            
+            /* 觀景窗內鏡頭流 */
             video { width: 100%; height: 100%; object-fit: cover; transition: transform 0.25s cubic-bezier(0.1, 0.7, 0.1, 1); transform-origin: center center; }
             
-            /* 提示框完美水平居中 */
-            #guidance-container { position: absolute; top: 20px; left: 0; width: 100%; display: flex; justify-content: center; z-index: 20; pointer-events: none; }
-            #guidance-box { width: 85%; background: rgba(0, 0, 0, 0.85); color: #00ffcc; padding: 14px 12px; border-radius: 12px; text-align: center; font-size: 14px; font-weight: bold; border: 1px solid #00ffcc; box-shadow: 0 4px 16px rgba(0,0,0,0.6); backdrop-filter: blur(6px); line-height: 1.4; box-sizing: border-box; }
+            /* 🔥 完美置中且融入 iPhone 畫面的導演提示框 */
+            #guidance-container { position: absolute; top: 15px; left: 0; width: 100%; display: flex; justify-content: center; z-index: 20; pointer-events: none; }
+            #guidance-box { width: 88%; background: rgba(0, 0, 0, 0.65); color: #00ffcc; padding: 10px 14px; border-radius: 20px; text-align: center; font-size: 13px; font-weight: 500; border: 1px solid rgba(0, 255, 204, 0.6); box-shadow: 0 4px 12px rgba(0,0,0,0.4); backdrop-filter: blur(10px); line-height: 1.4; box-sizing: border-box; }
             
-            /* 三分法輔助線 */
-            .grid-line { position: absolute; background: rgba(255, 255, 255, 0.38); z-index: 15; pointer-events: none; }
-            .v1 { left: 33.33%; top: 0; width: 1.5px; height: 100%; } .v2 { left: 66.66%; top: 0; width: 1.5px; height: 100%; }
-            .h1 { top: 33.33%; left: 0; height: 1.5px; width: 100%; } .h2 { top: 66.66%; left: 0; height: 1.5px; width: 100%; }
+            /* 經典白色三分法輔助線 */
+            .grid-line { position: absolute; background: rgba(255, 255, 255, 0.32); z-index: 15; pointer-events: none; }
+            .v1 { left: 33.33%; top: 0; width: 1px; height: 100%; } .v2 { left: 66.66%; top: 0; width: 1px; height: 100%; }
+            .h1 { top: 33.33%; left: 0; height: 1px; width: 100%; } .h2 { top: 66.66%; left: 0; height: 1px; width: 100%; }
             
-            /* 下方控制面板區 */
+            /* 下方控制底座面板（純黑 22vh 空間） */
             #control-panel { width: 100%; max-width: 500px; height: 22vh; display: flex; flex-direction: column; align-items: center; justify-content: space-evenly; background: #000; z-index: 30; padding-bottom: env(safe-area-inset-bottom); }
             
-            /* 幾倍數大小手動控制列（含 4.0x 功能） */
-            #zoom-control-bar { display: flex; gap: 18px; margin-bottom: 2px; }
-            .zoom-btn { width: 46px; height: 44px; border-radius: 20px; border: none; background: rgba(255,255,255,0.16); color: white; font-size: 11px; font-weight: bold; cursor: pointer; transition: all 0.2s ease; }
-            .zoom-btn.active { background: #ffd60a; color: black; transform: scale(1.1); box-shadow: 0 0 12px #ffd60a; }
+            /* 🔥 iPhone 標誌性圓環焦距切換器 */
+            #zoom-control-bar { display: flex; gap: 16px; align-items: center; background: rgba(255, 255, 255, 0.08); padding: 4px 14px; border-radius: 20px; }
+            .zoom-btn { background: none; border: none; color: #e5e5ea; font-size: 11px; font-weight: 600; cursor: pointer; padding: 4px 6px; border-radius: 50%; transition: all 0.15s ease; }
+            .zoom-btn.active { color: #ffd60a; transform: scale(1.15); font-weight: 700; }
             
-            /* 快門拍照按鈕 */
-            #snap-btn { width: 72px; height: 72px; border-radius: 50%; background: white; border: 5px solid #222; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
-            #status { color: #8e8e93; font-size: 11px; text-align: center; letter-spacing: 0.5px; }
+            /* 模式切換字樣（固定顯示 PHOTO，不可滑動但極具外觀仿真度） */
+            #mode-selector { color: #ffd60a; font-size: 12px; font-weight: 600; letter-spacing: 1px; margin-top: 2px; }
+            
+            /* 🔥 iPhone 標誌性的外大圈、內純白快門拍照鍵 */
+            #shutter-container { display: flex; align-items: center; justify-content: center; width: 100%; }
+            #snap-btn { width: 66px; height: 66px; border-radius: 50%; background: #fff; border: 4px solid #000; box-shadow: 0 0 0 4px #fff; cursor: pointer; transition: transform 0.1s ease; }
+            #snap-btn:active { transform: scale(0.9); background: #e5e5ea; }
+            
+            #status { color: #8e8e93; font-size: 10px; text-align: center; }
         </style>
     </head>
     <body>
+        <div id="top-bar">
+            <span class="top-icon">⚡</span>
+            <span style="font-size:12px; font-weight:500; opacity:0.8;">🟢 AI OVERSIGHT</span>
+            <span class="top-icon">⚙️</span>
+        </div>
+
         <div id="camera-container">
             <div id="guidance-container">
-                <div id="guidance-box">系統狀態：美學引導導演正在就位...</div>
+                <div id="guidance-box">美學引導系統已就位，正在偵測最佳構圖...</div>
             </div>
             <div class="grid-line v1"></div><div class="grid-line v2"></div>
             <div class="grid-line h1"></div><div class="grid-line h2"></div>
@@ -58,12 +75,18 @@ async def get_frontend():
 
         <div id="control-panel">
             <div id="zoom-control-bar">
-                <button id="z1" class="zoom-btn active" onclick="setManualZoom(1.0)">1.0x</button>
-                <button id="z2" class="zoom-btn" onclick="setManualZoom(2.0)">2.0x</button>
-                <button id="z4" class="zoom-btn" onclick="setManualZoom(4.0)">4.0x</button>
+                <button id="z1" class="zoom-btn active" onclick="setManualZoom(1.0)">1x</button>
+                <button id="z2" class="zoom-btn" onclick="setManualZoom(2.0)">2x</button>
+                <button id="z4" class="zoom-btn" onclick="setManualZoom(4.0)">4x</button>
             </div>
-            <div id="status">大腦狀態：構圖美學監督中</div>
-            <button id="snap-btn"></button>
+            
+            <div id="mode-selector">照片</div>
+            
+            <div id="shutter-container">
+                <button id="snap-btn"></button>
+            </div>
+            
+            <div id="status">裝置快門已同步</div>
         </div>
 
         <canvas id="canvas" style="display:none;"></canvas>
@@ -81,7 +104,7 @@ async def get_frontend():
 
             navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
             .then(stream => { video.srcObject = stream; setInterval(captureAndAnalyze, 1000); })
-            .catch(err => { guidanceBox.innerText = "相機開啟失敗，請確認權限"; });
+            .catch(err => { guidanceBox.innerText = "相機啟動失敗"; });
 
             function setManualZoom(factor) {
                 autoZoomMode = false; 
@@ -98,7 +121,7 @@ async def get_frontend():
                 else if (factor >= 1.8 && factor < 3.2) document.getElementById('z2').classList.add('active');
                 else if (factor >= 3.2) document.getElementById('z4').classList.add('active');
                 
-                statusText.innerText = autoZoomMode ? `AI 自動美學變焦：${factor.toFixed(1)}x` : `手動鎖定倍率：${factor.toFixed(1)}x`;
+                statusText.innerText = autoZoomMode ? `自動變焦：${factor.toFixed(1)}x` : `鎖定焦距：${factor.toFixed(1)}x`;
             }
 
             function captureAndAnalyze() {
@@ -135,7 +158,7 @@ async def get_frontend():
 
             snapBtn.addEventListener('click', () => {
                 if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                    statusText.innerText = "正在進行幾何美學裁切並儲存相簿...";
+                    statusText.innerText = "正在儲存美學裁切照片...";
                     canvas.width = video.videoWidth;
                     canvas.height = video.videoHeight;
                     
@@ -166,7 +189,7 @@ async def get_frontend():
                                 const blobUrl = URL.createObjectURL(imageBlob);
                                 const a = document.createElement('a'); a.href = blobUrl; a.download = `PhotoFramer_${Date.now()}.jpg`; a.click();
                             }
-                            statusText.innerText = "大腦狀態：構圖美學監督中";
+                            statusText.innerText = "相片已成功處置";
                         });
                     }, 'image/jpeg', 0.95);
                 }
