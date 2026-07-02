@@ -41,7 +41,7 @@ class SubjectAdaptiveClassifier:
         instructions = ""
         mode_key = "RoT"
 
-        # ─── 進入全即時動態引導流（修正 elif 海象運算子語意錯誤） ───
+        # ─── 進入全即時動態引導流 ───
         
         # 1. 偵測到環境呈現高度對稱
         if sym_score > 0.80:
@@ -56,15 +56,15 @@ class SubjectAdaptiveClassifier:
                 raw_action = "perfect"
                 instructions = "左右對稱平衡，請保持相機穩定直接拍攝"
 
-        # 2. 偵測到高聳垂直幾何（🔥 修正點：移除海象運算子，回歸純粹邏輯判斷）
+        # 2. 偵測到高聳垂直幾何（大樓或柱子）
         elif vertical_score > 0.40:
             mode_key = "Vertical"
             if left_w > right_w * 1.08:
                 raw_action = "left"
-                instructions = "請向左平移手機，校正幾何線條使其保持挺拔"
+                instructions = "請向左平移手機，校正垂直線條使其保持垂直對齊"
             elif right_w > left_w * 1.08:
                 raw_action = "right"
-                instructions = "請向右平移手機，校正幾何線條使其保持挺拔"
+                instructions = "請向右平移手機，校正垂直線條使其保持垂直對齊"
             else:
                 raw_action = "perfect"
                 instructions = "垂直幾何已對齊，請維持相機穩定直接拍攝"
@@ -88,7 +88,7 @@ class SubjectAdaptiveClassifier:
             raw_action = "zoom_out"
             instructions = "主體占比過大產生壓迫感，請退後保留呼吸空間"
 
-        # 5. 標準多模態自適應引導（原生 PhotoFramer 三分法動態流）
+        # 5. 標準多模態自適應引導（🔥 核心功能回歸：補回自動焦距調整判斷）
         else:
             mode_key = "RoT"
             if left_w > right_w * self.th_ratio:
@@ -98,11 +98,12 @@ class SubjectAdaptiveClassifier:
                 raw_action = "right"
                 instructions = "請向右平移手機，使主體對齊左側黃金網格線"
             else:
+                # 🪐 這邊就是負責觸發自動焦距縮放（Zoom In / Out）的關鍵部分！
                 if center_w < total_w * 0.22:
-                    raw_action = "zoom_in"
+                    raw_action = "zoom_in"  # 觸發前端 video 畫面放大 0.2x
                     instructions = "請放大焦距或向前走近，以凸顯核心焦點細節"
                 elif center_w > total_w * 0.40:
-                    raw_action = "zoom_out"
+                    raw_action = "zoom_out" # 觸發前端 video 畫面縮小 0.2x
                     instructions = "環境呼吸空間偏少，請稍微退後或縮小畫面倍率"
                 else:
                     raw_action = "perfect"
