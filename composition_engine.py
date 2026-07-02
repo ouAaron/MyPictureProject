@@ -21,9 +21,20 @@ class AcademicCompositionEngine:
         blurred = cv2.GaussianBlur(gray, (5, 5), 0)
         edges = cv2.Canny(blurred, 50, 150)
         
-        # 拿回帶有模式標籤的複合指令
-        raw_result, raw_action = self.classifier.detect_and_align(img, edges, gray)
-        mode_tag, instructions = raw_result.split('|')
+        # 呼叫大腦，拿回純淨無誤的指令
+        try:
+            raw_result, raw_action = self.classifier.detect_and_align(img, edges, gray)
+            if "@" in raw_result:
+                parts = raw_result.split('@')
+                mode_tag = parts[0]
+                instructions = parts[1]
+            else:
+                mode_tag = "RoT"
+                instructions = raw_result
+        except Exception as e:
+            mode_tag = "RoT"
+            instructions = "正在即時計算最佳拍攝視角..."
+            raw_action = "hold"
 
         # 時序平滑濾波（防跳針）
         self.history_queue.append(raw_action)
@@ -32,10 +43,10 @@ class AcademicCompositionEngine:
         
         final_action = max(set(self.history_queue), key=self.history_queue.count)
         
-        if final_action == "perfect" and "完美" not in instructions and "達標" not in instructions:
-            instructions = "構圖美學結構趨於穩定，畫面幾何平衡合格，請按下快門"
+        if final_action == "perfect" and "請" not in instructions and "退" not in instructions:
+            instructions = "畫面結構平衡合格，請直接按下快門"
 
-        # 幾何裁切
+        # 智慧美學裁切
         cx = w // 3 if final_action == "left" else ((2 * w) // 3 if final_action == "right" else w // 2)
         cy = h // 2
         xmin, ymin = int(max(0, cx - (w // 3.5))), int(max(0, cy - (h // 3.5)))
@@ -44,6 +55,5 @@ class AcademicCompositionEngine:
         cropped = img[ymin:ymax, xmin:xmax]
         _, img_encoded = cv2.imencode('.jpg', cropped, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
         
-        # 將 mode_tag 塞進 instructions 字串前段，用 ＠ 符號隔開，讓前端 app.py 好解析
         combined_instructions = f"{mode_tag}@{instructions}"
         return io.BytesIO(img_encoded.tobytes()), combined_instructions, final_action
