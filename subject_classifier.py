@@ -32,8 +32,7 @@ class SubjectAdaptiveClassifier:
         else:
             sym_score = 0.0
 
-        # 🪐 垂直幾何特徵粗略速算（用垂直投影代替霍夫直線，效率極高且絕不噴錯）
-        # 計算垂直方向的梯度強度
+        # 🪐 垂直幾何特徵粗略速算
         sobel_y = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
         sobel_y_abs = np.uint8(np.absolute(sobel_y))
         vertical_score = cv2.countNonZero(cv2.threshold(sobel_y_abs, 50, 255, cv2.THRESH_BINARY)[1]) / total_w
@@ -42,7 +41,7 @@ class SubjectAdaptiveClassifier:
         instructions = ""
         mode_key = "RoT"
 
-        # ─── 進入全即時動態引導流（修正變數遺失問題） ───
+        # ─── 進入全即時動態引導流（修正 elif 海象運算子語意錯誤） ───
         
         # 1. 偵測到環境呈現高度對稱
         if sym_score > 0.80:
@@ -57,8 +56,8 @@ class SubjectAdaptiveClassifier:
                 raw_action = "perfect"
                 instructions = "左右對稱平衡，請保持相機穩定直接拍攝"
 
-        # 2. 偵測到高聳垂直幾何（垂直梯度分數高 ➔ 判定為大樓或柱子）
-        elif vertical_score > 0.40 and vert_lines_exist := True:
+        # 2. 偵測到高聳垂直幾何（🔥 修正點：移除海象運算子，回歸純粹邏輯判斷）
+        elif vertical_score > 0.40:
             mode_key = "Vertical"
             if left_w > right_w * 1.08:
                 raw_action = "left"
@@ -81,7 +80,7 @@ class SubjectAdaptiveClassifier:
                 instructions = "請向右輕移鏡頭，將核心主角拉回畫面正中央"
             else:
                 raw_action = "perfect"
-                instructions = "主角已精確居中，請維持相機穩定準備拍摄"
+                instructions = "主角已精確居中，請維持相機穩定準備拍攝"
 
         # 4. 偵測到畫面特徵分布極其飽滿密實（滿版特寫環境）
         elif total_w > (w * h * 0.40):
