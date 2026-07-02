@@ -1,6 +1,5 @@
 # subject_classifier.py
 from PIL import Image, ImageStat
-import io
 
 class SubjectAdaptiveClassifier:
     def __init__(self):
@@ -25,7 +24,7 @@ class SubjectAdaptiveClassifier:
         instructions = ""
         mode_key = "RoT"
 
-        # ─── 進入毫秒級純指令引導流 ───
+        # ─── 進入毫秒級純動作指令引導流 ───
         if stat_left > stat_right * self.th_ratio:
             raw_action = "left"
             instructions = "請向左平移手機，使主體對齊右側黃金網格線"
