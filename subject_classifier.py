@@ -10,7 +10,7 @@ class SubjectAdaptiveClassifier:
     def detect_and_align(self, img, edges, gray):
         h, w = edges.shape
         
-        # 🪐 幾何區域極速像素權重計算（取代沉重的線條掃描，提速 100 倍）
+        # 🪐 幾何區域極速像素權重計算
         left_zone = edges[0:h, 0:w // 3]
         right_zone = edges[0:h, (2 * w) // 3:w]
         center_zone = edges[h // 4 : (3 * h) // 4, w // 4 : (3 * w) // 4]
@@ -20,7 +20,7 @@ class SubjectAdaptiveClassifier:
         center_w = cv2.countNonZero(center_zone)
         total_w = cv2.countNonZero(edges) + 1e-5
 
-        # 🪐 對稱性矩陣速算（用於倒影、對稱場景感知）
+        # 🪐 對稱性矩陣速算
         half_w = w // 2
         left_half = gray[0:h, 0:half_w]
         right_half = gray[0:h, half_w : half_w * 2]
@@ -28,67 +28,85 @@ class SubjectAdaptiveClassifier:
         
         if left_half.shape == right_half_flipped.shape:
             sym_diff = cv2.absdiff(left_half, right_half_flipped)
-            sym_score = 1.0 - (cv2.countNonZero(cv2.threshold(sym_diff, 40, 255, cv2.THRESH_BINARY)[1]) / (half_w * h))
+            sym_score = 1.0 - (cv2.countNonZero(cv2.threshold(sym_diff, 40, 255, cv2.THRESH_BINARY)[1]) / (half_w * h + 1e-5))
         else:
             sym_score = 0.0
 
+        # 🪐 垂直幾何特徵粗略速算（用垂直投影代替霍夫直線，效率極高且絕不噴錯）
+        # 計算垂直方向的梯度強度
+        sobel_y = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
+        sobel_y_abs = np.uint8(np.absolute(sobel_y))
+        vertical_score = cv2.countNonZero(cv2.threshold(sobel_y_abs, 50, 255, cv2.THRESH_BINARY)[1]) / total_w
+
         raw_action = "perfect"
         instructions = ""
+        mode_key = "RoT"
 
-        # ─── 進入全即時動態引導流（絕不拋出「完美判定」而停止指導） ───
+        # ─── 進入全即時動態引導流（修正變數遺失問題） ───
         
         # 1. 偵測到環境呈現高度對稱
         if sym_score > 0.80:
             mode_key = "Symmetric"
-            # 即使很平衡，依然即時引導使用者維持或極微調
             if left_w > right_w * self.th_ratio:
                 raw_action = "left"
-                instructions = "【對稱引導】請微調向左平移，讓兩側建築線條完美對稱"
+                instructions = "請向左平移鏡頭，微調兩側幾何使其對齊中軸"
             elif right_w > left_w * self.th_ratio:
                 raw_action = "right"
-                instructions = "【對稱引導】請微調向右平移，讓兩側建築線條完美對稱"
+                instructions = "請向右平移鏡頭，微調兩側幾何使其對齊中軸"
             else:
                 raw_action = "perfect"
-                instructions = "【對稱鎖定】水平對稱極佳，請保持手部穩定直接拍照"
+                instructions = "左右對稱平衡，請保持相機穩定直接拍攝"
 
-        # 2. 偵測到主體在中軸大面積集中（中心構圖環境）
+        # 2. 偵測到高聳垂直幾何（垂直梯度分數高 ➔ 判定為大樓或柱子）
+        elif vertical_score > 0.40 and vert_lines_exist := True:
+            mode_key = "Vertical"
+            if left_w > right_w * 1.08:
+                raw_action = "left"
+                instructions = "請向左平移手機，校正幾何線條使其保持挺拔"
+            elif right_w > left_w * 1.08:
+                raw_action = "right"
+                instructions = "請向右平移手機，校正幾何線條使其保持挺拔"
+            else:
+                raw_action = "perfect"
+                instructions = "垂直幾何已對齊，請維持相機穩定直接拍攝"
+
+        # 3. 偵測到主體在中軸大面積集中（中心構圖環境）
         elif center_w > total_w * 0.45:
             mode_key = "Center"
             if left_w > right_w * 1.08:
                 raw_action = "left"
-                instructions = "【中心追蹤】主角有些微偏右，請向左輕移將主體拉回正中"
+                instructions = "請向左輕移鏡頭，將核心主角拉回畫面正中央"
             elif right_w > left_w * 1.08:
                 raw_action = "right"
-                instructions = "【中心追蹤】主角有些微偏左，請向右輕移將主體拉回正中"
+                instructions = "請向右輕移鏡頭，將核心主角拉回畫面正中央"
             else:
                 raw_action = "perfect"
-                instructions = "【中心鎖定】主體已精確居中，請維持相機穩定準備按下快門"
+                instructions = "主角已精確居中，請維持相機穩定準備拍摄"
 
-        # 3. 偵測到畫面特徵分布極其飽滿密實（滿版特寫環境）
+        # 4. 偵測到畫面特徵分布極其飽滿密實（滿版特寫環境）
         elif total_w > (w * h * 0.40):
             mode_key = "Fill"
             raw_action = "zoom_out"
-            instructions = "【邊緣警告】主體太靠近屏幕邊緣，請身體後退一步或縮小焦距"
+            instructions = "主體占比過大產生壓迫感，請退後保留呼吸空間"
 
-        # 4. 標準多模態自適應引導（原生 PhotoFramer 三分法動態流）
+        # 5. 標準多模態自適應引導（原生 PhotoFramer 三分法動態流）
         else:
             mode_key = "RoT"
             if left_w > right_w * self.th_ratio:
                 raw_action = "left"
-                instructions = "【構圖指引】請向左平移鏡頭，引導主體貼近右側黃金線點"
+                instructions = "請向左平移手機，使主體對齊右側黃金網格線"
             elif right_w > left_w * self.th_ratio:
                 raw_action = "right"
-                instructions = "【構圖指引】請向右平移鏡頭，引導主體貼近左側黃金線點"
+                instructions = "請向右平移手機，使主體對齊左側黃金網格線"
             else:
-                # 左右平衡時，即時運算 Z 軸的遠近焦距指引
                 if center_w < total_w * 0.22:
                     raw_action = "zoom_in"
-                    instructions = "【焦距指引】主體在畫面中比例偏小，請手動點選 2x 放大焦距"
+                    instructions = "請放大焦距或向前走近，以凸顯核心焦點細節"
                 elif center_w > total_w * 0.40:
                     raw_action = "zoom_out"
-                    instructions = "【視野指引】環境呼吸空間偏少，請稍微退後或縮小畫面倍率"
+                    instructions = "環境呼吸空間偏少，請稍微退後或縮小畫面倍率"
                 else:
                     raw_action = "perfect"
-                    instructions = "【構圖達標】黃金比例已趨於穩定，請屏住呼吸直接拍攝"
+                    instructions = "畫面結構穩定平衡，請直接按下快門"
 
         return f"{mode_key}@{instructions}", raw_action
