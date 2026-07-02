@@ -9,7 +9,7 @@ class SubjectAdaptiveClassifier:
     def detect_and_align_fast(self, orig_img):
         w, h = orig_img.size
         
-        # 🪐 空間幾何三分區域切片（利用 PIL 內建矩陣，速度低於 1ms，一進去就能算）
+        # 🪐 空間幾何三分區域切片（幾何速算，一進去就能提供建議）
         left_third = orig_img.crop((0, 0, w // 3, h))
         right_third = orig_img.crop(((2 * w) // 3, 0, w, h))
         center_core = orig_img.crop((w // 4, h // 4, (3 * w) // 4, (3 * h) // 4))
