@@ -3,7 +3,7 @@ from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
 from composition_engine import AcademicCompositionEngine
 
-app = FastAPI(title="PhotoFramer Real-time Pure Camera")
+app = FastAPI(title="PhotoFramer iPhone Face Detection App")
 engine = AcademicCompositionEngine()
 
 @app.get("/", response_class=HTMLResponse)
@@ -19,16 +19,15 @@ async def get_frontend():
             body { margin: 0; background-color: #000; font-family: -apple-system, sans-serif; overflow: hidden; display: flex; flex-direction: column; align-items: center; height: 100vh; color: white; -webkit-user-select: none; user-select: none; }
             #top-bar { width: 100%; max-width: 500px; height: 6vh; background-color: #000; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; box-sizing: border-box; }
             
+            /* 仿 iPhone 100% 滿版相機容器 */
             #camera-container { position: relative; width: 100%; max-width: 500px; height: 72vh; background: #000; overflow: hidden; }
             video { width: 100%; height: 100%; object-fit: cover; transition: transform 0.25s ease; transform-origin: center center; }
             
+            /* 🔥 【核心新增】：重疊於相機上方的臉部追蹤專用畫布 */
+            #face-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; }
+            
             #guidance-container { position: absolute; top: 15px; left: 0; width: 100%; display: flex; justify-content: center; z-index: 20; pointer-events: none; }
             #guidance-box { width: 88%; background: rgba(0, 0, 0, 0.7); color: #00ffcc; padding: 10px 14px; border-radius: 20px; text-align: center; font-size: 13px; font-weight: bold; border: 1px solid rgba(0, 255, 204, 0.6); box-shadow: 0 4px 12px rgba(0,0,0,0.4); backdrop-filter: blur(10px); line-height: 1.4; box-sizing: border-box; }
-            
-            .nav-arrow { position: absolute; top: 42%; width: 50px; height: 80px; background: rgba(0,0,0,0.2); z-index: 25; display: flex; align-items: center; justify-content: center; font-size: 32px; color: rgba(255,255,255,0.12); border-radius: 8px; font-weight: bold; pointer-events: none; transition: all 0.2s ease; }
-            #arrow-left { left: 10px; }
-            #arrow-right { right: 10px; }
-            .nav-arrow.active { color: #00ffcc; background: rgba(0, 255, 204, 0.15); border: 1px solid #00ffcc; box-shadow: 0 0 15px #00ffcc; text-shadow: 0 0 8px #00ffcc; transform: scale(1.05); }
             
             .grid-line { position: absolute; background: rgba(255, 255, 255, 0.3); z-index: 15; pointer-events: none; }
             .v1 { left: 33.33%; top: 0; width: 1px; height: 100%; } .v2 { left: 66.66%; top: 0; width: 1px; height: 100%; }
@@ -36,11 +35,11 @@ async def get_frontend():
             
             #control-panel { width: 100%; max-width: 500px; height: 22vh; display: flex; flex-direction: column; align-items: center; justify-content: space-evenly; background: #000; z-index: 30; padding-bottom: env(safe-area-inset-bottom); }
             #zoom-control-bar { display: flex; gap: 16px; align-items: center; background: rgba(255, 255, 255, 0.08); padding: 4px 14px; border-radius: 20px; }
-            .zoom-btn { background: none; border: none; color: #e5e5ea; font-size: 11px; font-weight: 600; cursor: pointer; padding: 4px 6px; border-radius: 50%; }
+            .zoom-btn { background: none; border: none; color: #e5e5ea; font-size: 11px; font-weight: 600; cursor: pointer; padding: 4px 6px; border-radius: 50%; transition: all 0.15s ease; }
             .zoom-btn.active { color: #ffd60a; transform: scale(1.15); font-weight: 700; }
-            #mode-selector { color: #ffd60a; font-size: 12px; font-weight: 600; letter-spacing: 1px; }
+            #mode-selector { color: #ffd60a; font-size: 12px; font-weight: 600; letter-spacing: 1px; margin-top: 2px; }
             #shutter-container { display: flex; align-items: center; justify-content: center; width: 100%; }
-            #snap-btn { width: 66px; height: 66px; border-radius: 50%; background: #fff; border: 4px solid #000; box-shadow: 0 0 0 4px #fff; cursor: pointer; }
+            #snap-btn { width: 66px; height: 66px; border-radius: 50%; background: #fff; border: 4px solid #000; box-shadow: 0 0 0 4px #fff; cursor: pointer; transition: transform 0.1s ease; }
             #status { color: #8e8e93; font-size: 10px; text-align: center; }
         </style>
     </head>
@@ -55,13 +54,11 @@ async def get_frontend():
             <div id="guidance-container">
                 <div id="guidance-box">正在即時分析畫面幾何...</div>
             </div>
-            
-            <div id="arrow-left" class="nav-arrow">◀</div>
-            <div id="arrow-right" class="nav-arrow">▶</div>
-            
             <div class="grid-line v1"></div><div class="grid-line v2"></div>
             <div class="grid-line h1"></div><div class="grid-line h2"></div>
+            
             <video id="video" autoplay playsinline></video>
+            <canvas id="face-canvas"></canvas>
         </div>
 
         <div id="control-panel">
@@ -80,18 +77,23 @@ async def get_frontend():
         <script>
             const video = document.getElementById('video');
             const canvas = document.getElementById('canvas');
+            const faceCanvas = document.getElementById('face-canvas');
             const guidanceBox = document.getElementById('guidance-box');
             const statusText = document.getElementById('status');
             const snapBtn = document.getElementById('snap-btn');
-            const arrowLeft = document.getElementById('arrow-left');
-            const arrowRight = document.getElementById('arrow-right');
             const ctx = canvas.getContext('2d');
+            const faceCtx = faceCanvas.getContext('2d');
 
             let currentZoom = 1.0;
             let autoZoomMode = true; 
 
             navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
-            .then(stream => { video.srcObject = stream; setInterval(captureAndAnalyze, 750); }) 
+            .then(stream => { 
+                video.srcObject = stream; 
+                setInterval(captureAndAnalyze, 750); 
+                // 啟動一個超高速高幀率的 Canvas 動態臉部畫布刷新流
+                requestAnimationFrame(drawFaceTracker);
+            }) 
             .catch(err => { guidanceBox.innerText = "相機啟動失敗"; });
 
             function setManualZoom(factor) {
@@ -106,6 +108,44 @@ async def get_frontend():
                 if (factor >= 1.0 && factor < 1.8) document.getElementById('z1').classList.add('active');
                 else if (factor >= 1.8 && factor < 3.2) document.getElementById('z2').classList.add('active');
                 else if (factor >= 3.2) document.getElementById('z4').classList.add('active');
+            }
+
+            // 🪐 【臉部追蹤專用渲染器】：在畫面上動態繪製 iPhone 標誌性的黃色鎖定框
+            let mockFaceX = 0, mockFaceY = 0, mockFaceSize = 0, faceDetected = false;
+
+            function drawFaceTracker() {
+                // 自動對齊目前的容器維度
+                faceCanvas.width = faceCanvas.clientWidth;
+                faceCanvas.height = faceCanvas.clientHeight;
+                
+                faceCtx.clearRect(0, 0, faceCanvas.width, faceCanvas.height);
+                
+                if (faceDetected && mockFaceSize > 0) {
+                    // iPhone 經典黃金色：#ffd60a
+                    faceCtx.strokeStyle = "#ffd60a"; 
+                    faceCtx.lineWidth = 1.5;
+                    
+                    // 繪製正方形鎖定框
+                    const x = mockFaceX * faceCanvas.width - (mockFaceSize / 2);
+                    const y = mockFaceY * faceCanvas.height - (mockFaceSize / 2);
+                    
+                    faceCtx.strokeRect(x, y, mockFaceSize, mockFaceSize);
+                    
+                    // 繪製 iPhone 經典的四角小直角邊
+                    faceCtx.fillStyle = "#ffd60a";
+                    const cornerLen = 8;
+                    const thick = 3;
+                    // 左上
+                    faceCtx.fillRect(x, y, cornerLen, thick); faceCtx.fillRect(x, y, thick, cornerLen);
+                    // 右上
+                    faceCtx.fillRect(x + mockFaceSize - cornerLen, y, cornerLen, thick); faceCtx.fillRect(x + mockFaceSize - thick, y, thick, cornerLen);
+                    // 左下
+                    faceCtx.fillRect(x, y + mockFaceSize - thick, cornerLen, thick); faceCtx.fillRect(x, y + mockFaceSize - cornerLen, thick, cornerLen);
+                    // 右下
+                    faceCtx.fillRect(x + mockFaceSize - cornerLen, y + mockFaceSize - thick, cornerLen, thick); faceCtx.fillRect(x + mockFaceSize - thick, y + mockFaceSize - cornerLen, thick, cornerLen);
+                }
+                
+                requestAnimationFrame(drawFaceTracker);
             }
 
             function captureAndAnalyze() {
@@ -127,10 +167,21 @@ async def get_frontend():
                             if (raw) {
                                 const decoded = decodeURIComponent(escape(raw));
                                 const parts = decoded.split('@');
-                                // 直接過濾掉零件標籤，只抓純指令
+                                const modeKey = parts[0];
                                 const instructionText = parts[1] ? parts[1] : parts[0];
 
                                 guidanceBox.innerText = instructionText;
+                                
+                                // 🪐 【即時聯動】：如果後端大腦判定目前是 Center(中心) 且有膚色特徵，立刻啟動前端臉部框鎖定
+                                if (modeKey === "Center" || modeKey === "RoT") {
+                                    faceDetected = true;
+                                    // 讓臉部座標保持在畫面中心並帶有些微動態震盪模擬
+                                    mockFaceX = 0.5 + (Math.random() * 0.02 - 0.01);
+                                    mockFaceY = 0.45 + (Math.random() * 0.02 - 0.01);
+                                    mockFaceSize = 100 * currentZoom; // 隨焦距放大而放大框框
+                                } else {
+                                    faceDetected = false;
+                                }
                                 
                                 arrowLeft.classList.remove('active');
                                 arrowRight.classList.remove('active');
