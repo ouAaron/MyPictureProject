@@ -3,7 +3,7 @@ from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
 from composition_engine import AcademicCompositionEngine
 
-app = FastAPI(title="PhotoFramer Real-time Camera")
+app = FastAPI(title="PhotoFramer Adaptive Camera")
 engine = AcademicCompositionEngine()
 
 @app.get("/", response_class=HTMLResponse)
@@ -47,13 +47,13 @@ async def get_frontend():
     <body>
         <div id="top-bar">
             <span class="top-icon">⚡</span>
-            <span style="font-size:12px; font-weight:600; color:#ffd60a; letter-spacing:1px;">🟢 AI OVERSIGHT LIVE</span>
+            <span id="semantic-tag" style="font-size:12px; font-weight:700; color:#ffd60a; letter-spacing:1px;">🟢 SCANNING...</span>
             <span class="top-icon">⚙️</span>
         </div>
 
         <div id="camera-container">
             <div id="guidance-container">
-                <div id="guidance-box">美學核心就緒，正在即時分析構圖...</div>
+                <div id="guidance-box">智慧感知引擎啟動中...</div>
             </div>
             
             <div id="arrow-left" class="nav-arrow">◀</div>
@@ -72,7 +72,7 @@ async def get_frontend():
             </div>
             <div id="mode-selector">照片</div>
             <div id="shutter-container"><button id="snap-btn"></button></div>
-            <div id="status">即時美學推理流已開啟</div>
+            <div id="status">自適應美學推理串流已開啟</div>
         </div>
 
         <canvas id="canvas" style="display:none;"></canvas>
@@ -82,6 +82,7 @@ async def get_frontend():
             const canvas = document.getElementById('canvas');
             const guidanceBox = document.getElementById('guidance-box');
             const statusText = document.getElementById('status');
+            const semanticTag = document.getElementById('semantic-tag');
             const snapBtn = document.getElementById('snap-btn');
             const arrowLeft = document.getElementById('arrow-left');
             const arrowRight = document.getElementById('arrow-right');
@@ -91,7 +92,7 @@ async def get_frontend():
             let autoZoomMode = true; 
 
             navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
-            .then(stream => { video.srcObject = stream; setInterval(captureAndAnalyze, 800); }) // 800ms 超高流暢同步
+            .then(stream => { video.srcObject = stream; setInterval(captureAndAnalyze, 750); }) // 750ms 超高速無感同步
             .catch(err => { guidanceBox.innerText = "相機啟動失敗"; });
 
             function setManualZoom(factor) {
@@ -99,6 +100,7 @@ async def get_frontend():
                 updateZoomUI(factor);
             }
 
+            // 
             function updateZoomUI(factor) {
                 currentZoom = factor;
                 video.style.transform = `scale(${currentZoom})`;
@@ -125,7 +127,20 @@ async def get_frontend():
                             const action = response.headers.get('x-action-type');
                             
                             if (raw) {
-                                guidanceBox.innerText = decodeURIComponent(escape(raw));
+                                const textStr = decodeURIComponent(escape(raw));
+                                guidanceBox.innerText = textStr;
+                                
+                                // 🔥 根據大腦文字動態點亮頂部的專業模式燈
+                                if (textStr.includes("人物") || textStr.includes("人像")) {
+                                    semanticTag.innerText = "🔵 PORTRAIT 人像美學";
+                                    semanticTag.style.color = "#00ffcc";
+                                } else if (textStr.includes("大樓") || textStr.includes("建築")) {
+                                    semanticTag.innerText = "🏢 ARCHITECTURE 建築幾何";
+                                    semanticTag.style.color = "#ffd60a";
+                                } else {
+                                    semanticTag.innerText = "🏞️ SCENERY 環境景物";
+                                    semanticTag.style.color = "#34c759";
+                                }
                                 
                                 arrowLeft.classList.remove('active');
                                 arrowRight.classList.remove('active');
@@ -145,7 +160,7 @@ async def get_frontend():
 
             snapBtn.addEventListener('click', () => {
                 if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                    statusText.innerText = "正在儲存美學裁切照片...";
+                    statusText.innerText = "正在儲存優化照片...";
                     canvas.width = video.videoWidth;
                     canvas.height = video.videoHeight;
                     ctx.save();
