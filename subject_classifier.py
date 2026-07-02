@@ -10,7 +10,7 @@ class SubjectAdaptiveClassifier:
     def detect_and_align(self, img, edges, gray):
         h, w = edges.shape
         
-        # 🪐 幾何區域極速像素權重計算
+        # 🪐 幾何區域極速像素權重計算 (在 160 規格矩陣上，運算時間低於 1ms)
         left_zone = edges[0:h, 0:w // 3]
         right_zone = edges[0:h, (2 * w) // 3:w]
         center_zone = edges[h // 4 : (3 * h) // 4, w // 4 : (3 * w) // 4]
@@ -41,9 +41,7 @@ class SubjectAdaptiveClassifier:
         instructions = ""
         mode_key = "RoT"
 
-        # ─── 進入全即時動態引導流 ───
-        
-        # 1. 偵測到環境呈現高度對稱
+        # ─── 進入全即時動態純指令引導流 ───
         if sym_score > 0.80:
             mode_key = "Symmetric"
             if left_w > right_w * self.th_ratio:
@@ -56,7 +54,6 @@ class SubjectAdaptiveClassifier:
                 raw_action = "perfect"
                 instructions = "左右對稱平衡，請保持相機穩定直接拍攝"
 
-        # 2. 偵測到高聳垂直幾何（大樓或柱子）
         elif vertical_score > 0.40:
             mode_key = "Vertical"
             if left_w > right_w * 1.08:
@@ -69,7 +66,6 @@ class SubjectAdaptiveClassifier:
                 raw_action = "perfect"
                 instructions = "垂直幾何已對齊，請維持相機穩定直接拍攝"
 
-        # 3. 偵測到主體在中軸大面積集中（中心構圖環境）
         elif center_w > total_w * 0.45:
             mode_key = "Center"
             if left_w > right_w * 1.08:
@@ -82,13 +78,11 @@ class SubjectAdaptiveClassifier:
                 raw_action = "perfect"
                 instructions = "主角已精確居中，請維持相機穩定準備拍攝"
 
-        # 4. 偵測到畫面特徵分布極其飽滿密實（滿版特寫環境）
         elif total_w > (w * h * 0.40):
             mode_key = "Fill"
             raw_action = "zoom_out"
             instructions = "主體占比過大產生壓迫感，請退後保留呼吸空間"
 
-        # 5. 標準多模態自適應引導（🔥 核心功能回歸：補回自動焦距調整判斷）
         else:
             mode_key = "RoT"
             if left_w > right_w * self.th_ratio:
@@ -98,12 +92,11 @@ class SubjectAdaptiveClassifier:
                 raw_action = "right"
                 instructions = "請向右平移手機，使主體對齊左側黃金網格線"
             else:
-                # 🪐 這邊就是負責觸發自動焦距縮放（Zoom In / Out）的關鍵部分！
                 if center_w < total_w * 0.22:
-                    raw_action = "zoom_in"  # 觸發前端 video 畫面放大 0.2x
+                    raw_action = "zoom_in"
                     instructions = "請放大焦距或向前走近，以凸顯核心焦點細節"
                 elif center_w > total_w * 0.40:
-                    raw_action = "zoom_out" # 觸發前端 video 畫面縮小 0.2x
+                    raw_action = "zoom_out"
                     instructions = "環境呼吸空間偏少，請稍微退後或縮小畫面倍率"
                 else:
                     raw_action = "perfect"
