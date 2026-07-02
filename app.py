@@ -3,7 +3,7 @@ from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
 from composition_engine import AcademicCompositionEngine
 
-app = FastAPI(title="PhotoFramer iPhone Face Detection App")
+app = FastAPI(title="PhotoFramer iPhone Style Camera")
 engine = AcademicCompositionEngine()
 
 @app.get("/", response_class=HTMLResponse)
@@ -19,15 +19,21 @@ async def get_frontend():
             body { margin: 0; background-color: #000; font-family: -apple-system, sans-serif; overflow: hidden; display: flex; flex-direction: column; align-items: center; height: 100vh; color: white; -webkit-user-select: none; user-select: none; }
             #top-bar { width: 100%; max-width: 500px; height: 6vh; background-color: #000; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; box-sizing: border-box; }
             
-            /* 仿 iPhone 100% 滿版相機容器 */
             #camera-container { position: relative; width: 100%; max-width: 500px; height: 72vh; background: #000; overflow: hidden; }
             video { width: 100%; height: 100%; object-fit: cover; transition: transform 0.25s ease; transform-origin: center center; }
             
-            /* 🔥 【核心新增】：重疊於相機上方的臉部追蹤專用畫布 */
+            /* 臉部追蹤專用畫布 */
             #face-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; }
             
             #guidance-container { position: absolute; top: 15px; left: 0; width: 100%; display: flex; justify-content: center; z-index: 20; pointer-events: none; }
             #guidance-box { width: 88%; background: rgba(0, 0, 0, 0.7); color: #00ffcc; padding: 10px 14px; border-radius: 20px; text-align: center; font-size: 13px; font-weight: bold; border: 1px solid rgba(0, 255, 204, 0.6); box-shadow: 0 4px 12px rgba(0,0,0,0.4); backdrop-filter: blur(10px); line-height: 1.4; box-sizing: border-box; }
+            
+            /* 🔥 【優化需求】：平時隱藏不顯示，需要移動時才以 30% 透明度顯現 */
+            .nav-arrow { position: absolute; top: 42%; width: 50px; height: 80px; background: rgba(0,0,0,0.3); z-index: 25; display: flex; align-items: center; justify-content: center; font-size: 32px; color: #00ffcc; border-radius: 8px; font-weight: bold; pointer-events: none; opacity: 0; transition: opacity 0.2s ease; }
+            #arrow-left { left: 10px; }
+            #arrow-right { right: 10px; }
+            /* 活化時展現 30% 透明度 */
+            .nav-arrow.active { opacity: 0.3; border: 1px solid #00ffcc; box-shadow: 0 0 10px #00ffcc; }
             
             .grid-line { position: absolute; background: rgba(255, 255, 255, 0.3); z-index: 15; pointer-events: none; }
             .v1 { left: 33.33%; top: 0; width: 1px; height: 100%; } .v2 { left: 66.66%; top: 0; width: 1px; height: 100%; }
@@ -35,11 +41,11 @@ async def get_frontend():
             
             #control-panel { width: 100%; max-width: 500px; height: 22vh; display: flex; flex-direction: column; align-items: center; justify-content: space-evenly; background: #000; z-index: 30; padding-bottom: env(safe-area-inset-bottom); }
             #zoom-control-bar { display: flex; gap: 16px; align-items: center; background: rgba(255, 255, 255, 0.08); padding: 4px 14px; border-radius: 20px; }
-            .zoom-btn { background: none; border: none; color: #e5e5ea; font-size: 11px; font-weight: 600; cursor: pointer; padding: 4px 6px; border-radius: 50%; transition: all 0.15s ease; }
+            .zoom-btn { background: none; border: none; color: #e5e5ea; font-size: 11px; font-weight: 600; cursor: pointer; padding: 4px 6px; border-radius: 50%; }
             .zoom-btn.active { color: #ffd60a; transform: scale(1.15); font-weight: 700; }
-            #mode-selector { color: #ffd60a; font-size: 12px; font-weight: 600; letter-spacing: 1px; margin-top: 2px; }
+            #mode-selector { color: #ffd60a; font-size: 12px; font-weight: 600; letter-spacing: 1px; }
             #shutter-container { display: flex; align-items: center; justify-content: center; width: 100%; }
-            #snap-btn { width: 66px; height: 66px; border-radius: 50%; background: #fff; border: 4px solid #000; box-shadow: 0 0 0 4px #fff; cursor: pointer; transition: transform 0.1s ease; }
+            #snap-btn { width: 66px; height: 66px; border-radius: 50%; background: #fff; border: 4px solid #000; box-shadow: 0 0 0 4px #fff; cursor: pointer; }
             #status { color: #8e8e93; font-size: 10px; text-align: center; }
         </style>
     </head>
@@ -54,6 +60,10 @@ async def get_frontend():
             <div id="guidance-container">
                 <div id="guidance-box">正在即時分析畫面幾何...</div>
             </div>
+            
+            <div id="arrow-left" class="nav-arrow">◀</div>
+            <div id="arrow-right" class="nav-arrow">▶</div>
+            
             <div class="grid-line v1"></div><div class="grid-line v2"></div>
             <div class="grid-line h1"></div><div class="grid-line h2"></div>
             
@@ -69,7 +79,7 @@ async def get_frontend():
             </div>
             <div id="mode-selector">照片</div>
             <div id="shutter-container"><button id="snap-btn"></button></div>
-            <div id="status">即時物理美學引導流已開啟</div>
+            <div id="status">即時自適應引導串流中</div>
         </div>
 
         <canvas id="canvas" style="display:none;"></canvas>
@@ -81,18 +91,22 @@ async def get_frontend():
             const guidanceBox = document.getElementById('guidance-box');
             const statusText = document.getElementById('status');
             const snapBtn = document.getElementById('snap-btn');
+            const arrowLeft = document.getElementById('arrow-left');
+            const arrowRight = document.getElementById('arrow-right');
             const ctx = canvas.getContext('2d');
             const faceCtx = faceCanvas.getContext('2d');
 
             let currentZoom = 1.0;
             let autoZoomMode = true; 
 
+            // 臉部動態快取座標
+            let faceDetected = false, fx = 0, fy = 0, fSize = 0;
+
             navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
             .then(stream => { 
                 video.srcObject = stream; 
                 setInterval(captureAndAnalyze, 750); 
-                // 啟動一個超高速高幀率的 Canvas 動態臉部畫布刷新流
-                requestAnimationFrame(drawFaceTracker);
+                requestAnimationFrame(renderFaceTracker);
             }) 
             .catch(err => { guidanceBox.innerText = "相機啟動失敗"; });
 
@@ -110,42 +124,33 @@ async def get_frontend():
                 else if (factor >= 3.2) document.getElementById('z4').classList.add('active');
             }
 
-            // 🪐 【臉部追蹤專用渲染器】：在畫面上動態繪製 iPhone 標誌性的黃色鎖定框
-            let mockFaceX = 0, mockFaceY = 0, mockFaceSize = 0, faceDetected = false;
-
-            function drawFaceTracker() {
-                // 自動對齊目前的容器維度
+            // 🪐 【高精細臉部鎖定框渲染】
+            function renderFaceTracker() {
                 faceCanvas.width = faceCanvas.clientWidth;
                 faceCanvas.height = faceCanvas.clientHeight;
-                
                 faceCtx.clearRect(0, 0, faceCanvas.width, faceCanvas.height);
                 
-                if (faceDetected && mockFaceSize > 0) {
-                    // iPhone 經典黃金色：#ffd60a
+                if (faceDetected && fSize > 0) {
+                    // iPhone 經典黃金標記色
                     faceCtx.strokeStyle = "#ffd60a"; 
-                    faceCtx.lineWidth = 1.5;
+                    faceCtx.lineWidth = 1.2; // 精細細框
                     
-                    // 繪製正方形鎖定框
-                    const x = mockFaceX * faceCanvas.width - (mockFaceSize / 2);
-                    const y = mockFaceY * faceCanvas.height - (mockFaceSize / 2);
+                    // 從後端 240 等比縮放回前端真實手機螢幕的寬高
+                    const renderSize = (fSize / 240) * faceCanvas.width * currentZoom;
+                    const rx = fx * faceCanvas.width - (renderSize / 2);
+                    const ry = fy * faceCanvas.height - (renderSize / 2);
                     
-                    faceCtx.strokeRect(x, y, mockFaceSize, mockFaceSize);
+                    faceCtx.strokeRect(rx, ry, renderSize, renderSize);
                     
-                    // 繪製 iPhone 經典的四角小直角邊
+                    // 繪製四角細直角
                     faceCtx.fillStyle = "#ffd60a";
-                    const cornerLen = 8;
-                    const thick = 3;
-                    // 左上
-                    faceCtx.fillRect(x, y, cornerLen, thick); faceCtx.fillRect(x, y, thick, cornerLen);
-                    // 右上
-                    faceCtx.fillRect(x + mockFaceSize - cornerLen, y, cornerLen, thick); faceCtx.fillRect(x + mockFaceSize - thick, y, thick, cornerLen);
-                    // 左下
-                    faceCtx.fillRect(x, y + mockFaceSize - thick, cornerLen, thick); faceCtx.fillRect(x, y + mockFaceSize - cornerLen, thick, cornerLen);
-                    // 右下
-                    faceCtx.fillRect(x + mockFaceSize - cornerLen, y + mockFaceSize - thick, cornerLen, thick); faceCtx.fillRect(x + mockFaceSize - thick, y + mockFaceSize - cornerLen, thick, cornerLen);
+                    const l = 6, t = 2.5;
+                    faceCtx.fillRect(rx, ry, l, t); faceCtx.fillRect(rx, ry, t, l);
+                    faceCtx.fillRect(rx + renderSize - l, ry, l, t); faceCtx.fillRect(rx + renderSize - t, ry, t, l);
+                    faceCtx.fillRect(rx, ry + renderSize - t, l, t); faceCtx.fillRect(rx, ry + renderSize - l, t, l);
+                    faceCtx.fillRect(rx + renderSize - l, ry + renderSize - t, l, t); faceCtx.fillRect(rx + renderSize - t, ry + renderSize - l, t, l);
                 }
-                
-                requestAnimationFrame(drawFaceTracker);
+                requestAnimationFrame(renderFaceTracker);
             }
 
             function captureAndAnalyze() {
@@ -167,22 +172,21 @@ async def get_frontend():
                             if (raw) {
                                 const decoded = decodeURIComponent(escape(raw));
                                 const parts = decoded.split('@');
-                                const modeKey = parts[0];
-                                const instructionText = parts[1] ? parts[1] : parts[0];
-
-                                guidanceBox.innerText = instructionText;
                                 
-                                // 🪐 【即時聯動】：如果後端大腦判定目前是 Center(中心) 且有膚色特徵，立刻啟動前端臉部框鎖定
-                                if (modeKey === "Center" || modeKey === "RoT") {
+                                guidanceBox.innerText = parts[1];
+                                
+                                // 解析解耦出來的獨立臉部座標
+                                const faceData = parts[2].split('_');
+                                if (faceData[0] === "1") {
                                     faceDetected = true;
-                                    // 讓臉部座標保持在畫面中心並帶有些微動態震盪模擬
-                                    mockFaceX = 0.5 + (Math.random() * 0.02 - 0.01);
-                                    mockFaceY = 0.45 + (Math.random() * 0.02 - 0.01);
-                                    mockFaceSize = 100 * currentZoom; // 隨焦距放大而放大框框
+                                    fx = parseFloat(faceData[1]);
+                                    fy = parseFloat(faceData[2]);
+                                    fSize = parseFloat(faceData[3]);
                                 } else {
                                     faceDetected = false;
                                 }
                                 
+                                // 🔥 【動態顯隱箭頭】：需要移動時，才以 30% 透明度亮起
                                 arrowLeft.classList.remove('active');
                                 arrowRight.classList.remove('active');
                                 
@@ -238,21 +242,3 @@ async def get_frontend():
     </html>
     """
     return HTMLResponse(content=html_content, status_code=200)
-
-@app.post("/analyze-composition")
-async def analyze_composition(file: UploadFile = File(...)):
-    contents = await file.read()
-    output_buffer, instructions, action_type = engine.analyze(contents)
-    
-    if output_buffer is None:
-        return JSONResponse(status_code=400, content={"message": "處理失敗"})
-        
-    headers = {
-        "X-Instructions": instructions.encode('utf-8').decode('latin-1'),
-        "X-Action-Type": action_type
-    }
-    return StreamingResponse(output_buffer, media_type="image/jpeg", headers=headers)
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
