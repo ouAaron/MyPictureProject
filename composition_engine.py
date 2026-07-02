@@ -4,11 +4,13 @@ import io
 
 class AcademicCompositionEngine:
     def __init__(self):
-        # 論文美學判定嚴格門檻
-        self.imbalance_threshold = 1.05   
+        self.imbalance_threshold = 1.08   # 調緊失衡門檻至 8%，降低敏感度避免頻繁震盪
         self.ideal_area_min = 0.15        
         self.ideal_area_max = 0.45        
-        self.border_noise_threshold = 1.25 
+        
+        # 🔥 【技術突破點 1】：時序平滑狀態快取（防跳針機制）
+        self.history_queue = []
+        self.queue_max_size = 3 # 連續 3 幀確認才切換指令
 
     def analyze(self, image_bytes):
         try:
@@ -19,77 +21,92 @@ class AcademicCompositionEngine:
         
         w, h = orig_img.size
         
-        # 1. 顯著性高頻邊緣特徵過濾
+        # 提取高頻邊緣特徵
         edge_img = orig_img.filter(ImageFilter.FIND_EDGES).convert("L")
         edge_data = edge_img.load()
         
-        # 2. 空間敏感切片
+        # 空間敏感區切割
         left_third = orig_img.crop((0, 0, w // 3, h))
         right_third = orig_img.crop(((2 * w) // 3, 0, w, h))
-        
-        top_border = edge_img.crop((0, 0, w, int(h * 0.1)))
-        bottom_border = edge_img.crop((0, int(h * 0.9), w, h))
+        center_core = orig_img.crop((w // 4, h // 4, (3 * w) // 4, (3 * h) // 4))
         
         stat_left = ImageStat.Stat(left_third).rms[0]
         stat_right = ImageStat.Stat(right_third).rms[0]
+        stat_center = ImageStat.Stat(center_core).rms[0]
+        stat_global = ImageStat.Stat(orig_img).rms[0]
+        
+        # 提取邊緣干擾
+        top_border = edge_img.crop((0, 0, w, int(h * 0.1)))
+        bottom_border = edge_img.crop((0, int(h * 0.9), w, h))
         stat_top_edge = ImageStat.Stat(top_border).mean[0]
         stat_bottom_edge = ImageStat.Stat(bottom_border).mean[0]
+
+        # 🔥 【技術突破點 2】：區分人物與景物 (Semantic Differentiation)
+        # 統計中心區域與全圖的高頻特徵密度比值
+        edge_center = ImageStat.Stat(center_core.filter(ImageFilter.FIND_EDGES).convert("L")).mean[0]
+        edge_global = ImageStat.Stat(edge_img).mean[0]
         
-        # 3. 主體顯著性邊界占比計算
-        x_coords = []
-        y_coords = []
-        step = 4
-        for y in range(0, h, step):
-            for x in range(0, w, step):
-                if edge_data[x, y] > 45:
-                    x_coords.append(x)
-                    y_coords.append(y)
-                    
-        if len(x_coords) > 10:
-            saliency_w = max(x_coords) - min(x_coords)
-            saliency_h = max(y_coords) - min(y_coords)
-            saliency_area_ratio = (saliency_w * saliency_h) / (w * h)
-        else:
-            saliency_area_ratio = 0.3
-            
-        instructions = []
-        action_type = "hold"
+        # 如果中心邊緣特徵極度集中（比全球高出很多），代表是具有複雜輪廓的人像/主體
+        # 如果特徵分散，且水平/垂直能量對比明顯，代表是風景/環境
+        is_portrait = edge_center > edge_global * 1.3
         
-        # 🔥 【核心優化點】：精確轉換為具體、清楚的身體/相機動作指令
-        if stat_left > stat_right * self.imbalance_threshold:
-            instructions.append("【請將手機向左平移 10 公分】讓視覺主體落入右側三分線交點")
-            action_type = "left"
-        elif stat_right > stat_left * self.imbalance_threshold:
-            instructions.append("【請將手機向右平移 10 公分】讓視覺主體落入左側三分線交點")
-            action_type = "right"
-        elif stat_bottom_edge > self.border_noise_threshold or stat_top_edge > self.border_noise_threshold:
-            instructions.append("【請點選按鈕放大焦距】排除螢幕邊緣多餘的雜草欄杆等雜訊")
-            action_type = "zoom_in"
-        else:
-            if saliency_area_ratio < self.ideal_area_min:
-                instructions.append("【請身體往前跨一步，或點選 2.0x / 4.0x 放大焦距】凸顯視覺核心主體")
-                action_type = "zoom_in"
-            elif saliency_area_ratio > self.ideal_area_max:
-                instructions.append("【請身體後退一步，或縮小焦距】保留構圖邊緣的呼吸空間")
-                action_type = "zoom_out"
+        raw_action = "perfect"
+        instructions = ""
+        
+        # 根據語意切換不同美學標準
+        if is_portrait:
+            # 人像模式：嚴格遵循三分法交點引導主體
+            if stat_left > stat_right * self.imbalance_threshold:
+                raw_action = "left"
+                instructions = "【請向左平移 10 公分】微調人像位置，使其對齊右側黃金分割線"
+            elif stat_right > stat_left * self.imbalance_threshold:
+                raw_action = "right"
+                instructions = "【請向右平移 10 公分】微調人像位置，使其對齊左側黃金分割線"
             else:
-                instructions.append("完美黃金比例！請維持穩定，直接按下下方按鈕拍攝")
-                action_type = "perfect"
-
-        if action_type == "left":
-            cx, cy = w // 3, h // 2
-        elif action_type == "right":
-            cx, cy = (2 * w) // 3, h // 2
+                if stat_center < stat_global * 0.85:
+                    raw_action = "zoom_in"
+                    instructions = "【請前進或放大焦距】當前人物在畫面中過於渺小，請放大以凸顯主體"
+                elif stat_center > stat_global * 1.25:
+                    raw_action = "zoom_out"
+                    instructions = "【請後退或縮小焦距】人物占比過大產生壓迫感，請退後保留背景空間"
+                else:
+                    raw_action = "perfect"
+                    instructions = "人物比例絕佳！符合黃金分割美學，請直接拍攝"
         else:
-            cx, cy = w // 2, h // 2
+            # 景物模式：著重於邊緣冗餘干擾過濾與地平線平衡
+            if stat_bottom_edge > 1.3 or stat_top_edge > 1.3:
+                raw_action = "zoom_in"
+                instructions = "【請稍微放大焦距】偵測到風景邊緣存在雜亂干擾物，請微調焦距排除雜訊"
+            elif stat_left > stat_right * 1.12: # 風景模式左右容忍度放寬，避免風景細節導致頻繁提示
+                raw_action = "left"
+                instructions = "【請水平向左微移鏡頭】修正大自然景物視覺重心，平衡水平視覺特徵"
+            elif stat_right > stat_left * 1.12:
+                raw_action = "right"
+                instructions = "【請水平向右微移鏡頭】修正大自然景物視覺重心，平衡水平視覺特徵"
+            else:
+                raw_action = "perfect"
+                instructions = "風景地平線與環境光影結構非常完美，可直接拍攝"
 
+        # 🔥 【防跳針演算法】：時序佇列平滑濾波
+        self.history_queue.append(raw_action)
+        if len(self.history_queue) > self.queue_max_size:
+            self.history_queue.pop(0)
+            
+        # 進行多數決投票（Majority Voting）
+        final_action = max(set(self.history_queue), key=self.history_queue.count)
+        
+        # 若最終投票結果變更，同步更新對應的文字
+        if final_action == "perfect" and "完美" not in instructions:
+            instructions = "構圖指標已趨於穩定，美學標準合格，請直接拍攝"
+
+        # 美學幾何優化裁剪
+        cx, cy = (w // 3 if final_action == "left" else ((2 * w) // 3 if final_action == "right" else w // 2)), h // 2
         xmin, ymin = int(max(0, cx - (w // 3.5))), int(max(0, cy - (h // 3.5)))
         xmax, ymax = int(min(w, cx + (w // 3.5))), int(min(h, cy + (h // 3.5)))
         
         cropped_img = orig_img.crop((xmin, ymin, xmax, ymax))
-        
         output_buffer = io.BytesIO()
         cropped_img.save(output_buffer, format='JPEG', quality=95)
         output_buffer.seek(0)
         
-        return output_buffer, " | ".join(instructions), action_type
+        return output_buffer, instructions, final_action
