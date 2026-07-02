@@ -3,7 +3,7 @@ from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
 from composition_engine import AcademicCompositionEngine
 
-app = FastAPI(title="PhotoFramer Real-time Camera")
+app = FastAPI(title="PhotoFramer Classic Pure Camera")
 engine = AcademicCompositionEngine()
 
 @app.get("/", response_class=HTMLResponse)
@@ -25,10 +25,11 @@ async def get_frontend():
             #guidance-container { position: absolute; top: 15px; left: 0; width: 100%; display: flex; justify-content: center; z-index: 20; pointer-events: none; }
             #guidance-box { width: 88%; background: rgba(0, 0, 0, 0.7); color: #00ffcc; padding: 10px 14px; border-radius: 20px; text-align: center; font-size: 13px; font-weight: bold; border: 1px solid rgba(0, 255, 204, 0.6); box-shadow: 0 4px 12px rgba(0,0,0,0.4); backdrop-filter: blur(10px); line-height: 1.4; box-sizing: border-box; }
             
-            .nav-arrow { position: absolute; top: 42%; width: 50px; height: 80px; background: rgba(0,0,0,0.2); z-index: 25; display: flex; align-items: center; justify-content: center; font-size: 32px; color: rgba(255,255,255,0.12); border-radius: 8px; font-weight: bold; pointer-events: none; transition: all 0.2s ease; }
+            /* 30% 透明度大箭頭：需要移動時才淡淡浮現 */
+            .nav-arrow { position: absolute; top: 42%; width: 50px; height: 80px; background: rgba(0,0,0,0.3); z-index: 25; display: flex; align-items: center; justify-content: center; font-size: 32px; color: #00ffcc; border-radius: 8px; font-weight: bold; pointer-events: none; opacity: 0; transition: opacity 0.2s ease; }
             #arrow-left { left: 10px; }
             #arrow-right { right: 10px; }
-            .nav-arrow.active { color: #00ffcc; background: rgba(0, 255, 204, 0.15); border: 1px solid #00ffcc; box-shadow: 0 0 15px #00ffcc; text-shadow: 0 0 8px #00ffcc; transform: scale(1.05); }
+            .nav-arrow.active { opacity: 0.3; border: 1px solid #00ffcc; box-shadow: 0 0 10px #00ffcc; }
             
             .grid-line { position: absolute; background: rgba(255, 255, 255, 0.3); z-index: 15; pointer-events: none; }
             .v1 { left: 33.33%; top: 0; width: 1px; height: 100%; } .v2 { left: 66.66%; top: 0; width: 1px; height: 100%; }
@@ -47,13 +48,13 @@ async def get_frontend():
     <body>
         <div id="top-bar">
             <span class="top-icon">⚡</span>
-            <span style="font-size:12px; font-weight:600; color:#ffd60a; letter-spacing:1px;">🟢 AI OVERSIGHT LIVE</span>
+            <span style="font-size:12px; font-weight:700; color:#ffd60a; letter-spacing:1px;">🟢 AI OVERSIGHT LIVE</span>
             <span class="top-icon">⚙️</span>
         </div>
 
         <div id="camera-container">
             <div id="guidance-container">
-                <div id="guidance-box">美學核心就緒，正在即時分析構圖...</div>
+                <div id="guidance-box">正在即時分析畫面幾何...</div>
             </div>
             
             <div id="arrow-left" class="nav-arrow">◀</div>
@@ -61,6 +62,7 @@ async def get_frontend():
             
             <div class="grid-line v1"></div><div class="grid-line v2"></div>
             <div class="grid-line h1"></div><div class="grid-line h2"></div>
+            
             <video id="video" autoplay playsinline></video>
         </div>
 
@@ -72,7 +74,7 @@ async def get_frontend():
             </div>
             <div id="mode-selector">照片</div>
             <div id="shutter-container"><button id="snap-btn"></button></div>
-            <div id="status">即時美學推理流已開啟</div>
+            <div id="status">即時自適應引導串流中</div>
         </div>
 
         <canvas id="canvas" style="display:none;"></canvas>
@@ -91,7 +93,7 @@ async def get_frontend():
             let autoZoomMode = true; 
 
             navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
-            .then(stream => { video.srcObject = stream; setInterval(captureAndAnalyze, 800); }) // 800ms 超高流暢同步
+            .then(stream => { video.srcObject = stream; setInterval(captureAndAnalyze, 750); }) 
             .catch(err => { guidanceBox.innerText = "相機啟動失敗"; });
 
             function setManualZoom(factor) {
@@ -125,7 +127,9 @@ async def get_frontend():
                             const action = response.headers.get('x-action-type');
                             
                             if (raw) {
-                                guidanceBox.innerText = decodeURIComponent(escape(raw));
+                                // 🪐 【核心直連修復】：不再進行任何 @ 符號切片，直接讀取後端最純粹的純文字指令！
+                                const decodedInstruction = decodeURIComponent(escape(raw));
+                                guidanceBox.innerText = decodedInstruction;
                                 
                                 arrowLeft.classList.remove('active');
                                 arrowRight.classList.remove('active');
@@ -145,7 +149,7 @@ async def get_frontend():
 
             snapBtn.addEventListener('click', () => {
                 if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                    statusText.innerText = "正在儲存美學裁切照片...";
+                    statusText.innerText = "正在儲存優化照片...";
                     canvas.width = video.videoWidth;
                     canvas.height = video.videoHeight;
                     ctx.save();
@@ -182,21 +186,3 @@ async def get_frontend():
     </html>
     """
     return HTMLResponse(content=html_content, status_code=200)
-
-@app.post("/analyze-composition")
-async def analyze_composition(file: UploadFile = File(...)):
-    contents = await file.read()
-    output_buffer, instructions, action_type = engine.analyze(contents)
-    
-    if output_buffer is None:
-        return JSONResponse(status_code=400, content={"message": "處理失敗"})
-        
-    headers = {
-        "X-Instructions": instructions.encode('utf-8').decode('latin-1'),
-        "X-Action-Type": action_type
-    }
-    return StreamingResponse(output_buffer, media_type="image/jpeg", headers=headers)
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
