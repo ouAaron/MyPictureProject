@@ -3,16 +3,18 @@ import cv2
 import numpy as np
 import io
 from subject_classifier import SubjectAdaptiveClassifier
-# 🔥 引入剛剛新蓋的獨立美學裁切優化器
 from cropping_optimizer import AestheticCroppingOptimizer
+# 🔥 引入全新獨立的臉部辨識追蹤模組
+from face_tracker import iPhoneFaceTracker
 
 class AcademicCompositionEngine:
     def __init__(self):
         self.history_queue = []
         self.queue_max_size = 3
         self.classifier = SubjectAdaptiveClassifier()
-        # 實實例化優化器
         self.optimizer = AestheticCroppingOptimizer()
+        # 實例化臉部追蹤器
+        self.face_tracker = iPhoneFaceTracker()
 
     def analyze(self, image_bytes):
         nparr = np.frombuffer(image_bytes, np.uint8)
@@ -25,7 +27,10 @@ class AcademicCompositionEngine:
         blurred = cv2.GaussianBlur(gray, (5, 5), 0)
         edges = cv2.Canny(blurred, 50, 150)
         
-        # 呼叫大腦感知，拿回即時引導純指令
+        # 1. 執行獨立臉部追蹤計算
+        has_face, fx, fy, f_size = self.face_tracker.locate_face(gray)
+        
+        # 2. 呼叫大腦感知，拿回即時物理引導指令
         try:
             raw_result, raw_action = self.classifier.detect_and_align(img, edges, gray)
             if "@" in raw_result:
@@ -50,17 +55,17 @@ class AcademicCompositionEngine:
         if final_action == "perfect" and "請" not in instructions and "退" not in instructions:
             instructions = "畫面結構穩定平衡，請直接按下快門"
 
-        # ─── 按下快門後的精華美學處理 ───
-        # 預設基礎網格交點中心
+        # 3. 智慧美學不對稱偏置與框架保護裁切
         cx = w // 3 if final_action == "left" else ((2 * w) // 3 if final_action == "right" else w // 2)
         cy = h // 2
-        
-        # 🔥 【核心串聯】：調用專職優化器進行動態不對稱留白偏置與天然框架鎖定
         xmin, ymin, xmax, ymax = self.optimizer.optimize_crop_box(img, edges, gray, cx, cy)
         
-        # 執行高級感輸出裁切
         cropped = img[ymin:ymax, xmin:xmax]
         _, img_encoded = cv2.imencode('.jpg', cropped, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
         
-        combined_instructions = f"{mode_tag}@{instructions}"
+        # 🪐 將臉部數據包與美學狀態融合成一個複合指令送回前端
+        # 格式：模式標籤@指令文字@是否有臉_臉X_臉Y_臉大小
+        face_status = f"{1 if has_face else 0}_{fx}_{fy}_{f_size}"
+        combined_instructions = f"{mode_tag}@{instructions}@{face_status}"
+        
         return io.BytesIO(img_encoded.tobytes()), combined_instructions, final_action
