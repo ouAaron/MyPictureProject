@@ -14,7 +14,7 @@ class AcademicCompositionEngine:
         self.optimizer = AestheticCroppingOptimizer()
 
     def analyze(self, image_bytes):
-        # 🪐 核心速算：直接使用 PIL 讀取，完全避開 OpenCV 高清矩陣處理
+        # 🪐 核心速算：直接使用 PIL 讀取，完全避開 OpenCV 高清大圖處理
         try:
             orig_img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
         except:
@@ -36,11 +36,10 @@ class AcademicCompositionEngine:
         if final_action == "perfect" and "請" not in instructions and "退" not in instructions:
             instructions = "畫面結構穩定平衡，請直接按下快門"
 
-        # 3. 智慧美學裁切（快門按下時，自動進行大圖美學不對稱裁切）
+        # 3. 智慧美學裁切（只有快門按下時，才調用大圖進行不對稱留白裁切輸出）
         cx = w // 3 if final_action == "left" else ((2 * w) // 3 if final_action == "right" else w // 2)
         cy = h // 2
         
-        # 傳遞輕量化特徵供裁切優化器輔助計算
         img_np = np.array(orig_img)
         img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
         gray_small = cv2.resize(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY), (160, 120), interpolation=cv2.INTER_AREA)
@@ -57,6 +56,5 @@ class AcademicCompositionEngine:
         cropped = img_bgr[ymin_real:ymax_real, xmin_real:xmax_real]
         _, img_encoded = cv2.imencode('.jpg', cropped, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
         
-        # 純化傳回格式，不帶任何臉部標記
         combined_instructions = f"{mode_tag}@{instructions}"
         return io.BytesIO(img_encoded.tobytes()), combined_instructions, final_action
