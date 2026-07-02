@@ -3,7 +3,7 @@ from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
 from composition_engine import AcademicCompositionEngine
 
-app = FastAPI(title="PhotoFramer Subject-Aware App")
+app = FastAPI(title="PhotoFramer Real-time Camera")
 engine = AcademicCompositionEngine()
 
 @app.get("/", response_class=HTMLResponse)
@@ -19,28 +19,21 @@ async def get_frontend():
             body { margin: 0; background-color: #000; font-family: -apple-system, sans-serif; overflow: hidden; display: flex; flex-direction: column; align-items: center; height: 100vh; color: white; -webkit-user-select: none; user-select: none; }
             #top-bar { width: 100%; max-width: 500px; height: 6vh; background-color: #000; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; box-sizing: border-box; }
             
-            /* 滿版相機觀景窗 */
             #camera-container { position: relative; width: 100%; max-width: 500px; height: 72vh; background: #000; overflow: hidden; }
             video { width: 100%; height: 100%; object-fit: cover; transition: transform 0.25s ease; transform-origin: center center; }
             
-            /* 提示框完美置中 */
             #guidance-container { position: absolute; top: 15px; left: 0; width: 100%; display: flex; justify-content: center; z-index: 20; pointer-events: none; }
             #guidance-box { width: 88%; background: rgba(0, 0, 0, 0.7); color: #00ffcc; padding: 10px 14px; border-radius: 20px; text-align: center; font-size: 13px; font-weight: bold; border: 1px solid rgba(0, 255, 204, 0.6); box-shadow: 0 4px 12px rgba(0,0,0,0.4); backdrop-filter: blur(10px); line-height: 1.4; box-sizing: border-box; }
             
-            /* 🔥 【視覺亮點】：左右大面積半透明導引箭頭 */
-            .nav-arrow { position: absolute; top: 40%; width: 50px; height: 80px; background: rgba(0,0,0,0.25); z-index: 25; display: flex; align-items: center; justify-content: center; font-size: 32px; color: rgba(255,255,255,0.15); border-radius: 8px; font-weight: bold; pointer-events: none; transition: all 0.2s ease; backdrop-filter: blur(2px); }
+            .nav-arrow { position: absolute; top: 42%; width: 50px; height: 80px; background: rgba(0,0,0,0.2); z-index: 25; display: flex; align-items: center; justify-content: center; font-size: 32px; color: rgba(255,255,255,0.12); border-radius: 8px; font-weight: bold; pointer-events: none; transition: all 0.2s ease; }
             #arrow-left { left: 10px; }
             #arrow-right { right: 10px; }
+            .nav-arrow.active { color: #00ffcc; background: rgba(0, 255, 204, 0.15); border: 1px solid #00ffcc; box-shadow: 0 0 15px #00ffcc; text-shadow: 0 0 8px #00ffcc; transform: scale(1.05); }
             
-            /* 箭頭活化發光樣式（亮起時呈現極具科技感的閃爍霓虹綠） */
-            .nav-arrow.active { color: #00ffcc; background: rgba(0, 255, 204, 0.15); border: 1px solid #00ffcc; box-shadow: 0 0 15px #00ffcc; text-shadow: 0 0 8px #00ffcc; transform: scale(1.08); }
-            
-            /* 三分線 */
             .grid-line { position: absolute; background: rgba(255, 255, 255, 0.3); z-index: 15; pointer-events: none; }
             .v1 { left: 33.33%; top: 0; width: 1px; height: 100%; } .v2 { left: 66.66%; top: 0; width: 1px; height: 100%; }
             .h1 { top: 33.33%; left: 0; height: 1px; width: 100%; } .h2 { top: 66.66%; left: 0; height: 1px; width: 100%; }
             
-            /* 控制底座 */
             #control-panel { width: 100%; max-width: 500px; height: 22vh; display: flex; flex-direction: column; align-items: center; justify-content: space-evenly; background: #000; z-index: 30; padding-bottom: env(safe-area-inset-bottom); }
             #zoom-control-bar { display: flex; gap: 16px; align-items: center; background: rgba(255, 255, 255, 0.08); padding: 4px 14px; border-radius: 20px; }
             .zoom-btn { background: none; border: none; color: #e5e5ea; font-size: 11px; font-weight: 600; cursor: pointer; padding: 4px 6px; border-radius: 50%; }
@@ -54,13 +47,13 @@ async def get_frontend():
     <body>
         <div id="top-bar">
             <span class="top-icon">⚡</span>
-            <span id="semantic-tag" style="font-size:12px; font-weight:600; color:#ffd60a; letter-spacing:0.5px;">🟢 偵測中...</span>
+            <span style="font-size:12px; font-weight:600; color:#ffd60a; letter-spacing:1px;">🟢 AI OVERSIGHT LIVE</span>
             <span class="top-icon">⚙️</span>
         </div>
 
         <div id="camera-container">
             <div id="guidance-container">
-                <div id="guidance-box">正在感知拍攝物體之語意特徵...</div>
+                <div id="guidance-box">美學核心就緒，正在即時分析構圖...</div>
             </div>
             
             <div id="arrow-left" class="nav-arrow">◀</div>
@@ -79,7 +72,7 @@ async def get_frontend():
             </div>
             <div id="mode-selector">照片</div>
             <div id="shutter-container"><button id="snap-btn"></button></div>
-            <div id="status">美學推理引擎已就位</div>
+            <div id="status">即時美學推理流已開啟</div>
         </div>
 
         <canvas id="canvas" style="display:none;"></canvas>
@@ -89,7 +82,6 @@ async def get_frontend():
             const canvas = document.getElementById('canvas');
             const guidanceBox = document.getElementById('guidance-box');
             const statusText = document.getElementById('status');
-            const semanticTag = document.getElementById('semantic-tag');
             const snapBtn = document.getElementById('snap-btn');
             const arrowLeft = document.getElementById('arrow-left');
             const arrowRight = document.getElementById('arrow-right');
@@ -99,7 +91,7 @@ async def get_frontend():
             let autoZoomMode = true; 
 
             navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
-            .then(stream => { video.srcObject = stream; setInterval(captureAndAnalyze, 900); }) // 提升採樣速度至 900ms
+            .then(stream => { video.srcObject = stream; setInterval(captureAndAnalyze, 800); }) // 800ms 超高流暢同步
             .catch(err => { guidanceBox.innerText = "相機啟動失敗"; });
 
             function setManualZoom(factor) {
@@ -133,17 +125,8 @@ async def get_frontend():
                             const action = response.headers.get('x-action-type');
                             
                             if (raw) {
-                                const decoded = decodeURIComponent(escape(raw));
-                                guidanceBox.innerText = decoded;
+                                guidanceBox.innerText = decodeURIComponent(escape(raw));
                                 
-                                // 🔥 【動態標籤同步】：讓使用者看見系統偵測出人像還是景物
-                                if (decoded.includes("人物") || decoded.includes("人像")) {
-                                    semanticTag.innerText = "🟢 PORTRAIT 人像模式";
-                                } else {
-                                    semanticTag.innerText = "🟢 SCENERY 景物模式";
-                                }
-
-                                // 🔥 【動態箭頭控制】：亮起發光半透明箭頭，抹除跳針
                                 arrowLeft.classList.remove('active');
                                 arrowRight.classList.remove('active');
                                 
