@@ -25,7 +25,7 @@ async def get_frontend():
             #guidance-container { position: absolute; top: 15px; left: 0; width: 100%; display: flex; justify-content: center; z-index: 20; pointer-events: none; }
             #guidance-box { width: 88%; background: rgba(0, 0, 0, 0.7); color: #00ffcc; padding: 10px 14px; border-radius: 20px; text-align: center; font-size: 13px; font-weight: bold; border: 1px solid rgba(0, 255, 204, 0.6); box-shadow: 0 4px 12px rgba(0,0,0,0.4); backdrop-filter: blur(10px); line-height: 1.4; box-sizing: border-box; }
             
-            /* 左右引導大箭頭：平時隱藏，需要移動時才以 30% 透明度亮起 */
+            /* 30% 透明度大箭頭：需要移動時才淡淡浮現 */
             .nav-arrow { position: absolute; top: 42%; width: 50px; height: 80px; background: rgba(0,0,0,0.3); z-index: 25; display: flex; align-items: center; justify-content: center; font-size: 32px; color: #00ffcc; border-radius: 8px; font-weight: bold; pointer-events: none; opacity: 0; transition: opacity 0.2s ease; }
             #arrow-left { left: 10px; }
             #arrow-right { right: 10px; }
@@ -54,7 +54,7 @@ async def get_frontend():
 
         <div id="camera-container">
             <div id="guidance-container">
-                <div id="guidance-box">正在初始化智慧美學引擎...</div>
+                <div id="guidance-box">正在即時分析畫面幾何...</div>
             </div>
             
             <div id="arrow-left" class="nav-arrow">◀</div>
@@ -127,18 +127,10 @@ async def get_frontend():
                             const action = response.headers.get('x-action-type');
                             
                             if (raw) {
-                                const decoded = decodeURIComponent(escape(raw));
+                                // 🪐 【核心直連修復】：不再進行任何 @ 符號切片，直接讀取後端最純粹的純文字指令！
+                                const decodedInstruction = decodeURIComponent(escape(raw));
+                                guidanceBox.innerText = decodedInstruction;
                                 
-                                // 🔥 【核心校準修復】：重新精確對接純指令字串
-                                let finalInstruction = decoded;
-                                if (decoded.includes('@')) {
-                                    finalInstruction = decoded.split('@')[1];
-                                }
-                                
-                                // 直接渲染最純粹的動作指令，絕不卡頓或顯示預設字眼
-                                guidanceBox.innerText = finalInstruction;
-                                
-                                // 30% 透明度方向箭頭控制
                                 arrowLeft.classList.remove('active');
                                 arrowRight.classList.remove('active');
                                 
