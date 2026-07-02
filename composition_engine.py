@@ -3,12 +3,16 @@ import cv2
 import numpy as np
 import io
 from subject_classifier import SubjectAdaptiveClassifier
+# 🔥 引入剛剛新蓋的獨立美學裁切優化器
+from cropping_optimizer import AestheticCroppingOptimizer
 
 class AcademicCompositionEngine:
     def __init__(self):
         self.history_queue = []
         self.queue_max_size = 3
         self.classifier = SubjectAdaptiveClassifier()
+        # 實實例化優化器
+        self.optimizer = AestheticCroppingOptimizer()
 
     def analyze(self, image_bytes):
         nparr = np.frombuffer(image_bytes, np.uint8)
@@ -21,7 +25,7 @@ class AcademicCompositionEngine:
         blurred = cv2.GaussianBlur(gray, (5, 5), 0)
         edges = cv2.Canny(blurred, 50, 150)
         
-        # 呼叫大腦，拿回純淨無誤的指令
+        # 呼叫大腦感知，拿回即時引導純指令
         try:
             raw_result, raw_action = self.classifier.detect_and_align(img, edges, gray)
             if "@" in raw_result:
@@ -44,14 +48,17 @@ class AcademicCompositionEngine:
         final_action = max(set(self.history_queue), key=self.history_queue.count)
         
         if final_action == "perfect" and "請" not in instructions and "退" not in instructions:
-            instructions = "畫面結構平衡合格，請直接按下快門"
+            instructions = "畫面結構穩定平衡，請直接按下快門"
 
-        # 智慧美學裁切
+        # ─── 按下快門後的精華美學處理 ───
+        # 預設基礎網格交點中心
         cx = w // 3 if final_action == "left" else ((2 * w) // 3 if final_action == "right" else w // 2)
         cy = h // 2
-        xmin, ymin = int(max(0, cx - (w // 3.5))), int(max(0, cy - (h // 3.5)))
-        xmax, ymax = int(min(w, cx + (w // 3.5))), int(min(h, cy + (h // 3.5)))
         
+        # 🔥 【核心串聯】：調用專職優化器進行動態不對稱留白偏置與天然框架鎖定
+        xmin, ymin, xmax, ymax = self.optimizer.optimize_crop_box(img, edges, gray, cx, cy)
+        
+        # 執行高級感輸出裁切
         cropped = img[ymin:ymax, xmin:xmax]
         _, img_encoded = cv2.imencode('.jpg', cropped, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
         
