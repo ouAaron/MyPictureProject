@@ -3,7 +3,7 @@ from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
 from composition_engine import AcademicCompositionEngine
 
-app = FastAPI(title="PhotoFramer Adaptive Camera")
+app = FastAPI(title="PhotoFramer COMPASS 11-Class App")
 engine = AcademicCompositionEngine()
 
 @app.get("/", response_class=HTMLResponse)
@@ -47,13 +47,13 @@ async def get_frontend():
     <body>
         <div id="top-bar">
             <span class="top-icon">⚡</span>
-            <span id="semantic-tag" style="font-size:12px; font-weight:700; color:#ffd60a; letter-spacing:1px;">🟢 SCANNING...</span>
+            <span id="semantic-tag" style="font-size:11px; font-weight:800; color:#ffd60a; letter-spacing:1px;">🟢 ANALYZING LAYOUT...</span>
             <span class="top-icon">⚙️</span>
         </div>
 
         <div id="camera-container">
             <div id="guidance-container">
-                <div id="guidance-box">智慧感知引擎啟動中...</div>
+                <div id="guidance-box">美學核心已連線，正在進行多維度幾何解析...</div>
             </div>
             
             <div id="arrow-left" class="nav-arrow">◀</div>
@@ -72,7 +72,7 @@ async def get_frontend():
             </div>
             <div id="mode-selector">照片</div>
             <div id="shutter-container"><button id="snap-btn"></button></div>
-            <div id="status">自適應美學推理串流已開啟</div>
+            <div id="status">COMP-11 專家先驗演算法已激活</div>
         </div>
 
         <canvas id="canvas" style="display:none;"></canvas>
@@ -91,8 +91,23 @@ async def get_frontend():
             let currentZoom = 1.0;
             let autoZoomMode = true; 
 
+            // 🪐 對齊論文 11 大黃金分類名稱字典
+            const taxonomyNames = {
+                "RoT": "三分法構圖 (Rule of Thirds)",
+                "Center": "中心主體構圖 (Center)",
+                "Horizontal": "水平幾何構圖 (Horizontal)",
+                "Vertical": "垂直線條構圖 (Vertical)",
+                "Diagonal": "斜向對角線構圖 (Diagonal)",
+                "Curved": "優美曲線構圖 (Curved)",
+                "Triangle": "穩定三角形構圖 (Triangle)",
+                "Symmetric": "鏡面鏡像對稱 (Symmetry)",
+                "Pattern": "重複紋理圖案 (Pattern)",
+                "Leading": "透視引導線條 (Leading Lines)",
+                "Fill": "滿版框架填充 (Fill the Frame)"
+            };
+
             navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
-            .then(stream => { video.srcObject = stream; setInterval(captureAndAnalyze, 750); }) // 750ms 超高速無感同步
+            .then(stream => { video.srcObject = stream; setInterval(captureAndAnalyze, 850); }) 
             .catch(err => { guidanceBox.innerText = "相機啟動失敗"; });
 
             function setManualZoom(factor) {
@@ -100,7 +115,6 @@ async def get_frontend():
                 updateZoomUI(factor);
             }
 
-            // 
             function updateZoomUI(factor) {
                 currentZoom = factor;
                 video.style.transform = `scale(${currentZoom})`;
@@ -127,19 +141,19 @@ async def get_frontend():
                             const action = response.headers.get('x-action-type');
                             
                             if (raw) {
-                                const textStr = decodeURIComponent(escape(raw));
-                                guidanceBox.innerText = textStr;
+                                const decoded = decodeURIComponent(escape(raw));
+                                // 拆分大腦送回的 mode_tag 與實時指令文字
+                                const parts = decoded.split('@');
+                                const modeKey = parts[0];
+                                const instructionText = parts[1];
+
+                                guidanceBox.innerText = instructionText;
                                 
-                                // 🔥 根據大腦文字動態點亮頂部的專業模式燈
-                                if (textStr.includes("人物") || textStr.includes("人像")) {
-                                    semanticTag.innerText = "🔵 PORTRAIT 人像美學";
-                                    semanticTag.style.color = "#00ffcc";
-                                } else if (textStr.includes("大樓") || textStr.includes("建築")) {
-                                    semanticTag.innerText = "🏢 ARCHITECTURE 建築幾何";
-                                    semanticTag.style.color = "#ffd60a";
+                                // 🪐 連動頂部燈號：動態打出對應的 11 大美學分類字樣！
+                                if(taxonomyNames[modeKey]) {
+                                    semanticTag.innerText = `📸 ${taxonomyNames[modeKey].toUpperCase()}`;
                                 } else {
-                                    semanticTag.innerText = "🏞️ SCENERY 環境景物";
-                                    semanticTag.style.color = "#34c759";
+                                    semanticTag.innerText = "🟢 AI OVERSIGHT LIVE";
                                 }
                                 
                                 arrowLeft.classList.remove('active');
@@ -160,7 +174,7 @@ async def get_frontend():
 
             snapBtn.addEventListener('click', () => {
                 if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                    statusText.innerText = "正在儲存優化照片...";
+                    statusText.innerText = "正在進行美學優化與相簿儲存...";
                     canvas.width = video.videoWidth;
                     canvas.height = video.videoHeight;
                     ctx.save();
@@ -187,7 +201,7 @@ async def get_frontend():
                                 const blobUrl = URL.createObjectURL(imageBlob);
                                 const a = document.createElement('a'); a.href = blobUrl; a.download = `PhotoFramer_${Date.now()}.jpg`; a.click();
                             }
-                            statusText.innerText = "相片已成功處置";
+                            statusText.innerText = "美學相片處置完畢";
                         });
                     }, 'image/jpeg', 0.95);
                 }
@@ -197,21 +211,3 @@ async def get_frontend():
     </html>
     """
     return HTMLResponse(content=html_content, status_code=200)
-
-@app.post("/analyze-composition")
-async def analyze_composition(file: UploadFile = File(...)):
-    contents = await file.read()
-    output_buffer, instructions, action_type = engine.analyze(contents)
-    
-    if output_buffer is None:
-        return JSONResponse(status_code=400, content={"message": "處理失敗"})
-        
-    headers = {
-        "X-Instructions": instructions.encode('utf-8').decode('latin-1'),
-        "X-Action-Type": action_type
-    }
-    return StreamingResponse(output_buffer, media_type="image/jpeg", headers=headers)
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
