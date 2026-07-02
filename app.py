@@ -3,7 +3,7 @@ from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
 from composition_engine import AcademicCompositionEngine
 
-app = FastAPI(title="PhotoFramer iPhone Style Camera")
+app = FastAPI(title="PhotoFramer Zero-Latency Camera")
 engine = AcademicCompositionEngine()
 
 @app.get("/", response_class=HTMLResponse)
@@ -20,22 +20,12 @@ async def get_frontend():
             #top-bar { width: 100%; max-width: 500px; height: 6vh; background-color: #000; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; box-sizing: border-box; }
             
             #camera-container { position: relative; width: 100%; max-width: 500px; height: 72vh; background: #000; overflow: hidden; }
-            video { width: 100%; height: 100%; object-fit: cover; transition: transform 0.25s ease; transform-origin: center center; }
-            
-            /* 臉部追蹤專用畫布 */
-            #face-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; }
+            video { width: 100%; height: 100%; object-fit: cover; }
             
             #guidance-container { position: absolute; top: 15px; left: 0; width: 100%; display: flex; justify-content: center; z-index: 20; pointer-events: none; }
-            #guidance-box { width: 88%; background: rgba(0, 0, 0, 0.7); color: #00ffcc; padding: 10px 14px; border-radius: 20px; text-align: center; font-size: 13px; font-weight: bold; border: 1px solid rgba(0, 255, 204, 0.6); box-shadow: 0 4px 12px rgba(0,0,0,0.4); backdrop-filter: blur(10px); line-height: 1.4; box-sizing: border-box; }
+            #guidance-box { width: 88%; background: rgba(0, 0, 0, 0.7); color: #ffd60a; padding: 10px 14px; border-radius: 20px; text-align: center; font-size: 13px; font-weight: bold; border: 1px solid rgba(255, 214, 10, 0.5); box-shadow: 0 4px 12px rgba(0,0,0,0.4); backdrop-filter: blur(10px); line-height: 1.4; box-sizing: border-box; }
             
-            /* 🔥 【優化需求】：平時隱藏不顯示，需要移動時才以 30% 透明度顯現 */
-            .nav-arrow { position: absolute; top: 42%; width: 50px; height: 80px; background: rgba(0,0,0,0.3); z-index: 25; display: flex; align-items: center; justify-content: center; font-size: 32px; color: #00ffcc; border-radius: 8px; font-weight: bold; pointer-events: none; opacity: 0; transition: opacity 0.2s ease; }
-            #arrow-left { left: 10px; }
-            #arrow-right { right: 10px; }
-            /* 活化時展現 30% 透明度 */
-            .nav-arrow.active { opacity: 0.3; border: 1px solid #00ffcc; box-shadow: 0 0 10px #00ffcc; }
-            
-            .grid-line { position: absolute; background: rgba(255, 255, 255, 0.3); z-index: 15; pointer-events: none; }
+            .grid-line { position: absolute; background: rgba(255, 255, 255, 0.25); z-index: 15; pointer-events: none; }
             .v1 { left: 33.33%; top: 0; width: 1px; height: 100%; } .v2 { left: 66.66%; top: 0; width: 1px; height: 100%; }
             .h1 { top: 33.33%; left: 0; height: 1px; width: 100%; } .h2 { top: 66.66%; left: 0; height: 1px; width: 100%; }
             
@@ -52,23 +42,19 @@ async def get_frontend():
     <body>
         <div id="top-bar">
             <span class="top-icon">⚡</span>
-            <span style="font-size:12px; font-weight:700; color:#ffd60a; letter-spacing:1px;">🟢 AI OVERSIGHT LIVE</span>
+            <span style="font-size:12px; font-weight:700; color:#ffd60a; letter-spacing:1px;">🟢 iPhone PURE CAMERA</span>
             <span class="top-icon">⚙️</span>
         </div>
 
         <div id="camera-container">
             <div id="guidance-container">
-                <div id="guidance-box">正在即時分析畫面幾何...</div>
+                <div id="guidance-box">請對準主體，按下快門自動進行黃金比例優化</div>
             </div>
-            
-            <div id="arrow-left" class="nav-arrow">◀</div>
-            <div id="arrow-right" class="nav-arrow">▶</div>
             
             <div class="grid-line v1"></div><div class="grid-line v2"></div>
             <div class="grid-line h1"></div><div class="grid-line h2"></div>
             
             <video id="video" autoplay playsinline></video>
-            <canvas id="face-canvas"></canvas>
         </div>
 
         <div id="control-panel">
@@ -79,7 +65,7 @@ async def get_frontend():
             </div>
             <div id="mode-selector">照片</div>
             <div id="shutter-container"><button id="snap-btn"></button></div>
-            <div id="status">即時自適應引導串流中</div>
+            <div id="status">極速原生串流已就緒</div>
         </div>
 
         <canvas id="canvas" style="display:none;"></canvas>
@@ -87,127 +73,35 @@ async def get_frontend():
         <script>
             const video = document.getElementById('video');
             const canvas = document.getElementById('canvas');
-            const faceCanvas = document.getElementById('face-canvas');
             const guidanceBox = document.getElementById('guidance-box');
             const statusText = document.getElementById('status');
             const snapBtn = document.getElementById('snap-btn');
-            const arrowLeft = document.getElementById('arrow-left');
-            const arrowRight = document.getElementById('arrow-right');
             const ctx = canvas.getContext('2d');
-            const faceCtx = faceCanvas.getContext('2d');
 
             let currentZoom = 1.0;
-            let autoZoomMode = true; 
 
-            // 臉部動態快取座標
-            let faceDetected = false, fx = 0, fy = 0, fSize = 0;
-
+            // 🪐 拍照前百分之百純原生流，完全不執行定時 captureAndAnalyze，提速 100%
             navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
-            .then(stream => { 
-                video.srcObject = stream; 
-                setInterval(captureAndAnalyze, 750); 
-                requestAnimationFrame(renderFaceTracker);
-            }) 
+            .then(stream => { video.srcObject = stream; }) 
             .catch(err => { guidanceBox.innerText = "相機啟動失敗"; });
 
             function setManualZoom(factor) {
-                autoZoomMode = false; 
-                updateZoomUI(factor);
-            }
-
-            function updateZoomUI(factor) {
                 currentZoom = factor;
                 video.style.transform = `scale(${currentZoom})`;
                 document.querySelectorAll('.zoom-btn').forEach(b => b.classList.remove('active'));
-                if (factor >= 1.0 && factor < 1.8) document.getElementById('z1').classList.add('active');
-                else if (factor >= 1.8 && factor < 3.2) document.getElementById('z2').classList.add('active');
-                else if (factor >= 3.2) document.getElementById('z4').classList.add('active');
+                if (factor === 1.0) document.getElementById('z1').classList.add('active');
+                else if (factor === 2.0) document.getElementById('z2').classList.add('active');
+                else if (factor === 4.0) document.getElementById('z4').classList.add('active');
             }
 
-            // 🪐 【高精細臉部鎖定框渲染】
-            function renderFaceTracker() {
-                faceCanvas.width = faceCanvas.clientWidth;
-                faceCanvas.height = faceCanvas.clientHeight;
-                faceCtx.clearRect(0, 0, faceCanvas.width, faceCanvas.height);
-                
-                if (faceDetected && fSize > 0) {
-                    // iPhone 經典黃金標記色
-                    faceCtx.strokeStyle = "#ffd60a"; 
-                    faceCtx.lineWidth = 1.2; // 精細細框
-                    
-                    // 從後端 240 等比縮放回前端真實手機螢幕的寬高
-                    const renderSize = (fSize / 240) * faceCanvas.width * currentZoom;
-                    const rx = fx * faceCanvas.width - (renderSize / 2);
-                    const ry = fy * faceCanvas.height - (renderSize / 2);
-                    
-                    faceCtx.strokeRect(rx, ry, renderSize, renderSize);
-                    
-                    // 繪製四角細直角
-                    faceCtx.fillStyle = "#ffd60a";
-                    const l = 6, t = 2.5;
-                    faceCtx.fillRect(rx, ry, l, t); faceCtx.fillRect(rx, ry, t, l);
-                    faceCtx.fillRect(rx + renderSize - l, ry, l, t); faceCtx.fillRect(rx + renderSize - t, ry, t, l);
-                    faceCtx.fillRect(rx, ry + renderSize - t, l, t); faceCtx.fillRect(rx, ry + renderSize - l, t, l);
-                    faceCtx.fillRect(rx + renderSize - l, ry + renderSize - t, l, t); faceCtx.fillRect(rx + renderSize - t, ry + renderSize - l, t, l);
-                }
-                requestAnimationFrame(renderFaceTracker);
-            }
-
-            function captureAndAnalyze() {
-                if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                    canvas.width = 240;
-                    canvas.height = (video.videoHeight / video.videoWidth) * 240;
-                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                    
-                    canvas.toBlob((blob) => {
-                        if (!blob) return;
-                        const formData = new FormData();
-                        formData.append('file', blob, 'stream.jpg');
-
-                        fetch('/analyze-composition', { method: 'POST', body: formData })
-                        .then(response => {
-                            const raw = response.headers.get('x-instructions');
-                            const action = response.headers.get('x-action-type');
-                            
-                            if (raw) {
-                                const decoded = decodeURIComponent(escape(raw));
-                                const parts = decoded.split('@');
-                                
-                                guidanceBox.innerText = parts[1];
-                                
-                                // 解析解耦出來的獨立臉部座標
-                                const faceData = parts[2].split('_');
-                                if (faceData[0] === "1") {
-                                    faceDetected = true;
-                                    fx = parseFloat(faceData[1]);
-                                    fy = parseFloat(faceData[2]);
-                                    fSize = parseFloat(faceData[3]);
-                                } else {
-                                    faceDetected = false;
-                                }
-                                
-                                // 🔥 【動態顯隱箭頭】：需要移動時，才以 30% 透明度亮起
-                                arrowLeft.classList.remove('active');
-                                arrowRight.classList.remove('active');
-                                
-                                if (action === "left") arrowLeft.classList.add('active');
-                                else if (action === "right") arrowRight.classList.add('active');
-                                
-                                if (autoZoomMode) {
-                                    if (action === "zoom_in" && currentZoom < 4.0) updateZoomUI(Math.min(4.0, currentZoom + 0.2));
-                                    else if (action === "zoom_out" && currentZoom > 1.0) updateZoomUI(Math.max(1.0, currentZoom - 0.2));
-                                }
-                            }
-                        });
-                    }, 'image/jpeg', 0.4);
-                }
-            }
-
+            // 🪐 只有在按下快門的一瞬間，才將相片送至後端進行高級美學不對稱裁切
             snapBtn.addEventListener('click', () => {
                 if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                    statusText.innerText = "正在儲存優化照片...";
+                    statusText.innerText = "正在進行智慧美學裁切...";
+                    
                     canvas.width = video.videoWidth;
                     canvas.height = video.videoHeight;
+                    
                     ctx.save();
                     if (currentZoom > 1.0) {
                         ctx.translate(canvas.width / 2, canvas.height / 2);
@@ -232,7 +126,7 @@ async def get_frontend():
                                 const blobUrl = URL.createObjectURL(imageBlob);
                                 const a = document.createElement('a'); a.href = blobUrl; a.download = `PhotoFramer_${Date.now()}.jpg`; a.click();
                             }
-                            statusText.innerText = "相片已成功處置";
+                            statusText.innerText = "相片優化完成並已儲存";
                         });
                     }, 'image/jpeg', 0.95);
                 }
@@ -242,3 +136,18 @@ async def get_frontend():
     </html>
     """
     return HTMLResponse(content=html_content, status_code=200)
+
+@app.post("/analyze-composition")
+async def analyze_composition(file: UploadFile = File(...)):
+    contents = await file.read()
+    output_buffer, instructions, action_type = engine.analyze(contents)
+    
+    headers = {
+        "X-Instructions": instructions.encode('utf-8').decode('latin-1'),
+        "X-Action-Type": action_type
+    }
+    return StreamingResponse(output_buffer, media_type="image/jpeg", headers=headers)
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
