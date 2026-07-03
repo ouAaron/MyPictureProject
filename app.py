@@ -3,7 +3,7 @@ from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
 from composition_engine import AcademicCompositionEngine
 
-app = FastAPI(title="PhotoFramer Classic Pure Camera")
+app = FastAPI(title="PhotoFramer Multi-modal Camera")
 engine = AcademicCompositionEngine()
 
 @app.get("/", response_class=HTMLResponse)
@@ -25,7 +25,7 @@ async def get_frontend():
             #guidance-container { position: absolute; top: 15px; left: 0; width: 100%; display: flex; justify-content: center; z-index: 20; pointer-events: none; }
             #guidance-box { width: 88%; background: rgba(0, 0, 0, 0.7); color: #00ffcc; padding: 10px 14px; border-radius: 20px; text-align: center; font-size: 13px; font-weight: bold; border: 1px solid rgba(0, 255, 204, 0.6); box-shadow: 0 4px 12px rgba(0,0,0,0.4); backdrop-filter: blur(10px); line-height: 1.4; box-sizing: border-box; }
             
-            /* 30% 透明度大箭頭：需要移動時才淡淡浮現 */
+            /* 🔥 【箭頭優化】：平時完全隱藏，需要移動時才以 30% 透明度顯現 */
             .nav-arrow { position: absolute; top: 42%; width: 50px; height: 80px; background: rgba(0,0,0,0.3); z-index: 25; display: flex; align-items: center; justify-content: center; font-size: 32px; color: #00ffcc; border-radius: 8px; font-weight: bold; pointer-events: none; opacity: 0; transition: opacity 0.2s ease; }
             #arrow-left { left: 10px; }
             #arrow-right { right: 10px; }
@@ -36,6 +36,7 @@ async def get_frontend():
             .h1 { top: 33.33%; left: 0; height: 1px; width: 100%; } .h2 { top: 66.66%; left: 0; height: 1px; width: 100%; }
             
             #control-panel { width: 100%; max-width: 500px; height: 22vh; display: flex; flex-direction: column; align-items: center; justify-content: space-evenly; background: #000; z-index: 30; padding-bottom: env(safe-area-inset-bottom); }
+            /* 仿 iPhone 原生 1x / 2x / 4x 焦距變焦盤 */
             #zoom-control-bar { display: flex; gap: 16px; align-items: center; background: rgba(255, 255, 255, 0.08); padding: 4px 14px; border-radius: 20px; }
             .zoom-btn { background: none; border: none; color: #e5e5ea; font-size: 11px; font-weight: 600; cursor: pointer; padding: 4px 6px; border-radius: 50%; }
             .zoom-btn.active { color: #ffd60a; transform: scale(1.15); font-weight: 700; }
@@ -127,7 +128,6 @@ async def get_frontend():
                             const action = response.headers.get('x-action-type');
                             
                             if (raw) {
-                                // 🪐 【核心直連修復】：不再進行任何 @ 符號切片，直接讀取後端最純粹的純文字指令！
                                 const decodedInstruction = decodeURIComponent(escape(raw));
                                 guidanceBox.innerText = decodedInstruction;
                                 
@@ -186,3 +186,21 @@ async def get_frontend():
     </html>
     """
     return HTMLResponse(content=html_content, status_code=200)
+
+@app.post("/analyze-composition")
+async def analyze_composition(file: UploadFile = File(...)):
+    contents = await file.read()
+    output_buffer, instructions, action_type = engine.analyze(contents)
+    
+    if output_buffer is None:
+        return JSONResponse(status_code=400, content={"message": "處理失敗"})
+        
+    headers = {
+        "X-Instructions": instructions.encode('utf-8').decode('latin-1'),
+        "X-Action-Type": action_type
+    }
+    return StreamingResponse(output_buffer, media_type="image/jpeg", headers=headers)
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
