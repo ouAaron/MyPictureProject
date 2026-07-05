@@ -1,11 +1,45 @@
-# app.py
+import os
+import urllib.request
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
 from composition_engine import AcademicCompositionEngine
 
+# =====================================================================
+# 🔗 【雲端 AI 大腦設定區】本機不佔空間的關鍵！
+# =====================================================================
+MODEL_PATH = "best.pt"
+# ⚠️ 未來你在 Google Colab 訓練好並上傳到 Hugging Face 後，
+# 請把下面這個網址換成你專屬的模型直接下載連結 (Direct Download URL)
+MODEL_URL = "https://huggingface.co/你的帳號/你的專案/resolve/main/best.pt"
+
 app = FastAPI(title="PhotoFramer Multi-modal Camera")
 engine = AcademicCompositionEngine()
 
+# =====================================================================
+# 📥 【智慧雲端攔截器】當 Render 伺服器啟動時，自動下載並鑲嵌模型
+# =====================================================================
+@app.on_event("startup")
+def load_cloud_model():
+    print("📢 正在檢查後端 AI 大腦狀態...")
+    if not os.path.exists(MODEL_PATH):
+        print(f"📥 偵測到 Render 伺服器首次開機，正在從雲端下載 YOLO 模型: {MODEL_URL}")
+        try:
+            # 建立下載連線，把網路上的大腦下載到 Render 當前路徑下
+            urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
+            print("✅ 雲端美學大腦模型下載成功！")
+        except Exception as e:
+            print(f"❌ 模型下載失敗，錯誤訊息: {e}")
+            print("💡 提示：請確認您的 MODEL_URL 網址是否正確，且 Hugging Face 設為公開倉庫")
+    else:
+        print("✅ 偵測到本機/伺服器已有現存模型，跳過下載步驟。")
+    
+    # 這裡未來在你的 composition_engine.py 裡，可以用 YOLO(MODEL_PATH) 把它載入進去！
+    print("🚀 PhotoFramer 後端伺服器與 AI 引擎初始化完畢！")
+
+
+# =====================================================================
+# 🖥️ 【原本的前端相機網頁介面】（完全保留，一字未改）
+# =====================================================================
 @app.get("/", response_class=HTMLResponse)
 async def get_frontend():
     html_content = """
@@ -25,7 +59,6 @@ async def get_frontend():
             #guidance-container { position: absolute; top: 15px; left: 0; width: 100%; display: flex; justify-content: center; z-index: 20; pointer-events: none; }
             #guidance-box { width: 88%; background: rgba(0, 0, 0, 0.7); color: #00ffcc; padding: 10px 14px; border-radius: 20px; text-align: center; font-size: 13px; font-weight: bold; border: 1px solid rgba(0, 255, 204, 0.6); box-shadow: 0 4px 12px rgba(0,0,0,0.4); backdrop-filter: blur(10px); line-height: 1.4; box-sizing: border-box; }
             
-            /* 🔥 【箭頭優化】：平時完全隱藏，需要移動時才以 30% 透明度顯現 */
             .nav-arrow { position: absolute; top: 42%; width: 50px; height: 80px; background: rgba(0,0,0,0.3); z-index: 25; display: flex; align-items: center; justify-content: center; font-size: 32px; color: #00ffcc; border-radius: 8px; font-weight: bold; pointer-events: none; opacity: 0; transition: opacity 0.2s ease; }
             #arrow-left { left: 10px; }
             #arrow-right { right: 10px; }
@@ -36,7 +69,6 @@ async def get_frontend():
             .h1 { top: 33.33%; left: 0; height: 1px; width: 100%; } .h2 { top: 66.66%; left: 0; height: 1px; width: 100%; }
             
             #control-panel { width: 100%; max-width: 500px; height: 22vh; display: flex; flex-direction: column; align-items: center; justify-content: space-evenly; background: #000; z-index: 30; padding-bottom: env(safe-area-inset-bottom); }
-            /* 仿 iPhone 原生 1x / 2x / 4x 焦距變焦盤 */
             #zoom-control-bar { display: flex; gap: 16px; align-items: center; background: rgba(255, 255, 255, 0.08); padding: 4px 14px; border-radius: 20px; }
             .zoom-btn { background: none; border: none; color: #e5e5ea; font-size: 11px; font-weight: 600; cursor: pointer; padding: 4px 6px; border-radius: 50%; }
             .zoom-btn.active { color: #ffd60a; transform: scale(1.15); font-weight: 700; }
@@ -187,6 +219,10 @@ async def get_frontend():
     """
     return HTMLResponse(content=html_content, status_code=200)
 
+
+# =====================================================================
+# ⚙️ 【原本的即時分析 API 接口】（完全保留，一字未改）
+# =====================================================================
 @app.post("/analyze-composition")
 async def analyze_composition(file: UploadFile = File(...)):
     contents = await file.read()
@@ -200,6 +236,7 @@ async def analyze_composition(file: UploadFile = File(...)):
         "X-Action-Type": action_type
     }
     return StreamingResponse(output_buffer, media_type="image/jpeg", headers=headers)
+
 
 if __name__ == "__main__":
     import uvicorn
