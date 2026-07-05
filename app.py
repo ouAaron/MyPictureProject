@@ -5,40 +5,29 @@ from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
 from composition_engine import AcademicCompositionEngine
 
 # =====================================================================
-# 🔗 【雲端 AI 大腦設定區】本機不佔空間的關鍵！
+# 🔗 【雲端 AI 大腦設定區】
 # =====================================================================
 MODEL_PATH = "best.pt"
-# ⚠️ 未來你在 Google Colab 訓練好並上傳到 Hugging Face 後，
-# 請把下面這個網址換成你專屬的模型直接下載連結 (Direct Download URL)
 MODEL_URL = "https://huggingface.co/你的帳號/你的專案/resolve/main/best.pt"
 
 app = FastAPI(title="PhotoFramer Multi-modal Camera")
 engine = AcademicCompositionEngine()
 
-# =====================================================================
-# 📥 【智慧雲端攔截器】當 Render 伺服器啟動時，自動下載並鑲嵌模型
-# =====================================================================
 @app.on_event("startup")
 def load_cloud_model():
     print("📢 正在檢查後端 AI 大腦狀態...")
     if not os.path.exists(MODEL_PATH):
         print(f"📥 偵測到 Render 伺服器首次開機，正在從雲端下載 YOLO 模型: {MODEL_URL}")
         try:
-            # 建立下載連線，把網路上的大腦下載到 Render 當前路徑下
             urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
             print("✅ 雲端美學大腦模型下載成功！")
         except Exception as e:
-            print(f"❌ 模型下載失敗，錯誤訊息: {e}")
-            print("💡 提示：請確認您的 MODEL_URL 網址是否正確，且 Hugging Face 設為公開倉庫")
+            print(f"❌ 模型下載失敗: {e}")
     else:
-        print("✅ 偵測到本機/伺服器已有現存模型，跳過下載步驟。")
-    
-    # 這裡未來在你的 composition_engine.py 裡，可以用 YOLO(MODEL_PATH) 把它載入進去！
-    print("🚀 PhotoFramer 後端伺服器與 AI 引擎初始化完畢！")
-
+        print("✅ 偵測到已有現存模型，跳過下載。")
 
 # =====================================================================
-# 🖥️ 【原本的前端相機網頁介面】（完全保留，一字未改）
+# 🖥️ 【前端相機網頁介面】🔥 畫質全新優化版！
 # =====================================================================
 @app.get("/", response_class=HTMLResponse)
 async def get_frontend():
@@ -125,7 +114,15 @@ async def get_frontend():
             let currentZoom = 1.0;
             let autoZoomMode = true; 
 
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+            // ⚡ 請求相機並鎖定最高解析度配置 (Ideal 1080p 或最高)
+            navigator.mediaDevices.getUserMedia({ 
+                video: { 
+                    facingMode: 'environment',
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 }
+                }, 
+                audio: false 
+            })
             .then(stream => { video.srcObject = stream; setInterval(captureAndAnalyze, 750); }) 
             .catch(err => { guidanceBox.innerText = "相機啟動失敗"; });
 
@@ -143,6 +140,7 @@ async def get_frontend():
                 else if (factor >= 3.2) document.getElementById('z4').classList.add('active');
             }
 
+            // 1. 🔄 【即時串流流暢分析流】：固定壓縮成 240px、品質 0.4，保證低延遲
             function captureAndAnalyze() {
                 if (video.readyState === video.HAVE_ENOUGH_DATA) {
                     canvas.width = 240;
@@ -175,15 +173,19 @@ async def get_frontend():
                                 }
                             }
                         });
-                    }, 'image/jpeg', 0.4);
+                    }, 'image/jpeg', 0.4); // 💡 品質 0.4，檔案極小，傳輸飛快
                 }
             }
 
+            // 2. 📸 【按下快門高清拍照流】：完全釋放相機硬體最大解析度，無損儲存
             snapBtn.addEventListener('click', () => {
                 if (video.readyState === video.HAVE_ENOUGH_DATA) {
                     statusText.innerText = "正在儲存優化照片...";
+                    
+                    // 🔥 關鍵優化：直接解鎖，採用鏡頭原生的真實最高像素 (如 1920x1080 或更高)
                     canvas.width = video.videoWidth;
                     canvas.height = video.videoHeight;
+                    
                     ctx.save();
                     if (currentZoom > 1.0) {
                         ctx.translate(canvas.width / 2, canvas.height / 2);
@@ -210,7 +212,7 @@ async def get_frontend():
                             }
                             statusText.innerText = "相片已成功處置";
                         });
-                    }, 'image/jpeg', 0.95);
+                    }, 'image/jpeg', 1.0); // 🔥 品質調到 1.0 (無損高品質)，徹底告別馬賽克與模糊！
                 }
             });
         </script>
@@ -219,10 +221,6 @@ async def get_frontend():
     """
     return HTMLResponse(content=html_content, status_code=200)
 
-
-# =====================================================================
-# ⚙️ 【原本的即時分析 API 接口】（完全保留，一字未改）
-# =====================================================================
 @app.post("/analyze-composition")
 async def analyze_composition(file: UploadFile = File(...)):
     contents = await file.read()
@@ -236,7 +234,6 @@ async def analyze_composition(file: UploadFile = File(...)):
         "X-Action-Type": action_type
     }
     return StreamingResponse(output_buffer, media_type="image/jpeg", headers=headers)
-
 
 if __name__ == "__main__":
     import uvicorn
