@@ -1,51 +1,15 @@
 import os
-import math
-import numpy as np
-import urllib.request
+import requests
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
 
-# =====================================================================
-# 🔗 【PhotoFramer 官方模型雲端直連設定】
-# =====================================================================
-OFFICIAL_MODEL_PATH = "photoframer_bagel_7b.pt"
-OFFICIAL_MODEL_URL = "https://huggingface.co/zhiyuanyou/photoframer/resolve/main/photoframer_bagel_7b.pt"
+app = FastAPI(title="PhotoFramer Multi-modal Camera (Distributed System)")
 
-app = FastAPI(title="PhotoFramer Multi-modal Camera (Official CVPR2026 Optimized)")
-
-official_engine = None
-official_assessment = None
-
-@app.on_event("startup")
-def load_official_cvpr_models():
-    global official_engine, official_assessment
-    print("📢 正在檢查 PhotoFramer 2026 官方核心權重...")
-    
-    if not os.path.exists(OFFICIAL_MODEL_PATH):
-        print("📥 首次啟動，正在下載 CVPR 2026 官方 7B 權重大腦...")
-        try:
-            urllib.request.urlretrieve(OFFICIAL_MODEL_URL, OFFICIAL_MODEL_PATH)
-            print("✅ 官方 7B 美學模型下載成功！")
-        except Exception as e:
-            print(f"❌ 官方權重下載失敗: {e}")
-    else:
-        print("✅ 偵測到官方權重已存在，跳過下載。")
-
-    try:
-        print("📦 正在初始化 Bagel 混合模態理解-生成架編碼器...")
-        
-        # 🔥 【性能優化 1：開機預熱機制 (Warm-up)】
-        print("⚡ 正在進行全自動 CPU 預熱推理，釋放首次加載延遲...")
-        fake_img = np.zeros((240, 240, 3), dtype=np.uint8) # 生一張空圖片
-        # 模擬讓引擎吃一次假圖片，把最卡的第一次運算在開機時消化掉
-        print("🔥 預熱完成！記憶體緩衝區已鎖定。")
-        
-        print("🚀 PhotoFramer 官方核心與 Reinforcement Learning 評估引擎鑲嵌完畢！")
-    except Exception as e:
-        print(f"⚠️ 初始化官方架構警告: {e}")
+# 🔗 【GCP 雲端大腦直連設定】已經完美鎖定忞侖的超級電腦 IP！
+GCP_VM_IP = "http://34.80.78.95/predict"
 
 # =====================================================================
-# 🖥️ 【前端相機網頁介面】🔥 流暢度大優化版
+# 🖥️ 【前端相機網頁介面】（高流暢、高清拍照拆分架構）
 # =====================================================================
 @app.get("/", response_class=HTMLResponse)
 async def get_frontend():
@@ -82,12 +46,12 @@ async def get_frontend():
     <body>
         <div id="top-bar">
             <span class="top-icon">⚡</span>
-            <span style="font-size:12px; font-weight:700; color:#ffd60a; letter-spacing:1px;">🟢 AI OVERSIGHT LIVE</span>
+            <span style="font-size:12px; font-weight:700; color:#ffd60a; letter-spacing:1px;">🟢 GCP DISTRIBUTED LIVE</span>
             <span class="top-icon">⚙️</span>
         </div>
 
         <div id="camera-container">
-            <div id="guidance-container"><div id="guidance-box">正在進行 CVPR 官方全自動混合模態構圖分析...</div></div>
+            <div id="guidance-container"><div id="guidance-box">正在連線至 GCP 雲端進行 PhotoFramer 幾何分析...</div></div>
             <div id="arrow-left" class="nav-arrow">◀</div><div id="arrow-right" class="nav-arrow">▶</div>
             <div class="grid-line v1"></div><div class="grid-line v2"></div>
             <div class="grid-line h1"></div><div class="grid-line h2"></div>
@@ -102,7 +66,7 @@ async def get_frontend():
             </div>
             <div id="mode-selector">照片</div>
             <div id="shutter-container"><button id="snap-btn"></button></div>
-            <div id="status">即時自適應引導串流中</div>
+            <div id="status">雲端分布式架構通車中</div>
         </div>
 
         <canvas id="canvas" style="display:none;"></canvas>
@@ -119,13 +83,12 @@ async def get_frontend():
 
             let currentZoom = 1.0;
             let autoZoomMode = true; 
-            let isAnalyzing = false; // 🔥 【性能優化 2：狀態鎖】確保前一次算完才送下一次
+            let isAnalyzing = false; 
 
             navigator.mediaDevices.getUserMedia({ 
                 video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }, 
                 audio: false 
             })
-            // 🔥 【性能優化 3：延長分析間隔】從 750ms 延長到 1500ms（1.5秒），大幅舒緩伺服器排隊壓力
             .then(stream => { video.srcObject = stream; setInterval(captureAndAnalyze, 1500); }) 
             .catch(err => { guidanceBox.innerText = "相機啟動失敗"; });
 
@@ -141,7 +104,6 @@ async def get_frontend():
             }
 
             function captureAndAnalyze() {
-                // 如果後端還在卡，直接跳過這一次，拒絕排隊
                 if (isAnalyzing) return; 
                 
                 if (video.readyState === video.HAVE_ENOUGH_DATA) {
@@ -169,7 +131,7 @@ async def get_frontend():
                             }
                         })
                         .finally(() => {
-                            isAnalyzing = false; // 算完了，解鎖釋放
+                            isAnalyzing = false; 
                         });
                     }, 'image/jpeg', 0.4);
                 }
@@ -177,7 +139,7 @@ async def get_frontend():
 
             snapBtn.addEventListener('click', () => {
                 if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                    statusText.innerText = "正在調用官方無損高清流...";
+                    statusText.innerText = "正在儲存高清相片...";
                     canvas.width = video.videoWidth;
                     canvas.height = video.videoHeight;
                     
@@ -192,21 +154,9 @@ async def get_frontend():
                     
                     canvas.toBlob((blob) => {
                         if (!blob) return;
-                        const formData = new FormData();
-                        formData.append('file', blob, 'capture.jpg');
-
-                        fetch('/analyze-composition', { method: 'POST', body: formData })
-                        .then(response => response.blob())
-                        .then(async (imageBlob) => {
-                            const file = new File([imageBlob], `PhotoFramer_Official_${Date.now()}.jpg`, { type: 'image/jpeg' });
-                            if (navigator.canShare && navigator.canShare({ files: [file] })) {
-                                try { await navigator.share({ files: [file], title: '儲存優化相片' }); } catch (e) {}
-                            } else {
-                                const blobUrl = URL.createObjectURL(imageBlob);
-                                const a = document.createElement('a'); a.href = blobUrl; a.download = `PhotoFramer_Official_${Date.now()}.jpg`; a.click();
-                            }
-                            statusText.innerText = "相片已成功處置";
-                        });
+                        const blobUrl = URL.createObjectURL(blob);
+                        const a = document.createElement('a'); a.href = blobUrl; a.download = `PhotoFramer_Official_${Date.now()}.jpg`; a.click();
+                        statusText.innerText = "相片已成功處置";
                     }, 'image/jpeg', 1.0);
                 }
             });
@@ -217,43 +167,40 @@ async def get_frontend():
     return HTMLResponse(content=html_content, status_code=200)
 
 # =====================================================================
-# ⚙️ 【即時分析 API 接口】
+# ⚙️ 【即時分析中繼 API】⚡ 透過網路直接呼叫忞侖的 GCP 雲端大腦
 # =====================================================================
 @app.post("/analyze-composition")
 async def analyze_composition(file: UploadFile = File(...)):
-    import cv2
     contents = await file.read()
     
-    instructions = "正在調用 PhotoFramer 7B 進行多模態構圖演算..."
+    # 預設後備引導訊息
+    instructions = "正在將資料轉發給 GCP 超級電腦運算..."
     action_type = "hold"
     
+    # 🎯 物理流外包！直接把手機影像丟給 GCP 伺服器去算
     try:
-        nparr = np.frombuffer(contents, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        simulated_score = 3.8  
-        
-        if simulated_score > 3.0:
-            instructions = "包含更多遠方的地平線與開放天空。確保水平線持平以維持平衡。" [cite: 25, 26]
-            action_type = "hold"
+        response = requests.post(
+            GCP_VM_IP, 
+            files={"file": ("stream.jpg", contents, "image/jpeg")}, 
+            timeout=3
+        )
+        if response.status_code == 200:
+            data = response.json()
+            # 從 GCP 回傳的結果中，抓取論文規定的 Full Auto 引導文字與幾何動作
+            instructions = data.get("instructions", instructions)
+            action_type = data.get("action_type", action_type)
     except Exception as e:
-        print(f"官方模型即時幾何推理錯誤: {e}")
-
-    from composition_engine import AcademicCompositionEngine
-    engine = AcademicCompositionEngine()
-    output_buffer, eng_ins, eng_act = engine.analyze(contents)
-    
-    if action_type == "hold" and eng_ins:
-        instructions = eng_ins
-        action_type = eng_act
-        
-    if output_buffer is None:
-        return JSONResponse(status_code=400, content={"message": "處理失敗"})
+        print(f"❌ 無法連線至 GCP 伺服器 ({GCP_VM_IP}): {e}")
+        instructions = "雲端大腦連線中..."
+        action_type = "hold"
         
     headers = {
         "X-Instructions": instructions.encode('utf-8').decode('latin-1'),
         "X-Action-Type": action_type
     }
-    return StreamingResponse(output_buffer, media_type="image/jpeg", headers=headers)
+    
+    # 回傳空的串流來帶上 Headers 即可，節省 Render 頻寬與 CPU 資源
+    return StreamingResponse(iter([contents]), media_type="image/jpeg", headers=headers)
 
 if __name__ == "__main__":
     import uvicorn
